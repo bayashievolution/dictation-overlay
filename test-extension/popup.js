@@ -17,7 +17,15 @@ function connect() {
     port = chrome.runtime.connectNative(HOST);
     log('connectNative() 呼び出し');
     port.onMessage.addListener((msg) => {
-      log('← ' + JSON.stringify(msg));
+      if (msg && msg.type === 'monitor_list' && Array.isArray(msg.monitors)) {
+        log('← monitor_list:');
+        msg.monitors.forEach((m) => {
+          const star = m.is_primary ? '★' : ' ';
+          log(`  ${star} #${m.index} ${m.name || ''} ${m.width}x${m.height} @ (${m.x},${m.y}) scale=${m.scale_factor}`);
+        });
+      } else {
+        log('← ' + JSON.stringify(msg));
+      }
     });
     port.onDisconnect.addListener(() => {
       const err = chrome.runtime.lastError;
@@ -75,6 +83,26 @@ document.getElementById('hide').addEventListener('click', () => {
 
 document.getElementById('ping').addEventListener('click', () => {
   send({ type: 'ping' });
+});
+
+document.getElementById('ct-on').addEventListener('click', () => {
+  send({ type: 'set_click_through', enabled: true });
+});
+document.getElementById('ct-off').addEventListener('click', () => {
+  send({ type: 'set_click_through', enabled: false });
+});
+
+document.getElementById('list-monitors').addEventListener('click', () => {
+  send({ type: 'list_monitors' });
+});
+document.getElementById('mon-0').addEventListener('click', () => {
+  send({ type: 'set_monitor', index: 0 });
+});
+document.getElementById('mon-1').addEventListener('click', () => {
+  send({ type: 'set_monitor', index: 1 });
+});
+document.getElementById('mon-2').addEventListener('click', () => {
+  send({ type: 'set_monitor', index: 2 });
 });
 
 document.getElementById('exit').addEventListener('click', () => {

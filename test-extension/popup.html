@@ -7,23 +7,24 @@
     body {
       margin: 0;
       padding: 12px;
-      width: 320px;
+      width: 360px;
       font-family: 'Yu Gothic UI', system-ui, sans-serif;
       font-size: 13px;
       background: #1a1a1a;
       color: #eee;
     }
     h1 { font-size: 14px; margin: 0 0 10px; }
+    h2 { font-size: 12px; margin: 12px 0 4px; color: #aaa; font-weight: normal; border-top: 1px solid #333; padding-top: 10px; }
     button {
       display: block;
       width: 100%;
-      padding: 8px;
-      margin: 4px 0;
+      padding: 7px;
+      margin: 3px 0;
       background: #2d6cdf;
       color: #fff;
       border: 0;
       border-radius: 4px;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
     }
     button:hover { background: #3e7ff0; }
@@ -54,11 +55,11 @@
       font-family: 'Consolas', monospace;
       font-size: 11px;
       white-space: pre-wrap;
-      max-height: 120px;
+      max-height: 140px;
       overflow: auto;
     }
     .row { display: flex; gap: 6px; }
-    .row button { flex: 1; }
+    .row button { flex: 1; margin: 3px 0; }
   </style>
 </head>
 <body>
@@ -69,12 +70,30 @@
     <button id="disconnect" class="secondary">切断</button>
   </div>
 
+  <h2>字幕</h2>
   <textarea id="text" placeholder="送信する字幕テキスト">こんにちは、dictation-overlay の
 動作確認中です →</textarea>
-
   <button id="show">show_caption 送信</button>
-  <button id="hide" class="secondary">hide_caption</button>
-  <button id="ping" class="secondary">ping</button>
+  <div class="row">
+    <button id="hide" class="secondary">hide_caption</button>
+    <button id="ping" class="secondary">ping</button>
+  </div>
+
+  <h2>Phase 2 — クリックスルー</h2>
+  <div class="row">
+    <button id="ct-on">クリックスルー ON</button>
+    <button id="ct-off" class="secondary">クリックスルー OFF</button>
+  </div>
+
+  <h2>Phase 2 — マルチモニタ</h2>
+  <button id="list-monitors" class="secondary">list_monitors</button>
+  <div class="row">
+    <button id="mon-0">モニタ #0</button>
+    <button id="mon-1" class="secondary">#1</button>
+    <button id="mon-2" class="secondary">#2</button>
+  </div>
+
+  <h2>終了</h2>
   <button id="exit" class="danger">exit（ネイティブ終了）</button>
 
   <div id="status">未接続</div>

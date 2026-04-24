@@ -190,3 +190,27 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
   - stdout 先頭に `ready` が length-prefix 付きで書き出されることを確認（103 bytes）
   - `exit` メッセージを受けたらプロセスが正常終了することを確認
   - WebView2 の stderr ログは native messaging では Chrome が吸わないので実害なし
+
+## 試行錯誤ログ — 2026-04-25 Phase 2 実装
+
+### 設計判断
+- **クリックスルーは起動時デフォルト ON**。オーバーレイの本質要件なので、OFF で立ち上げると UX がちぐはぐ。拡張側から `set_click_through: false` を送ればドラッグやリサイズができる「位置調整モード」に入れる
+- **Tauri 2.0 の `set_ignore_cursor_events(bool)` を信頼**。HANDOFF では「Win32 SetWindowLong 直叩き」と書いてあったが、実際は Tauri 内部で `GWL_EXSTYLE | WS_EX_TRANSPARENT` を立てているので十分。macOS でも同 API が `NSWindow.ignoresMouseEvents` にマップされるのでクロスプラットフォームで同じコード
+- **モニタ配置アルゴリズム**：`position_on_monitor_bottom(window, monitor, margin)` を実装。monitor の position と size、window の outer_size から物理ピクセルで中央下配置を計算。マルチモニタで負の座標もあり得るので `(mon_w - win_w).max(0) / 2` のように下限クランプ
+- **起動時のプライマリ配置**：setup フック内で `primary_monitor()` → `position_on_monitor_bottom` を呼ぶ。`visible: false` でも `outer_size()` は設定値を返すので初期配置で問題なし
+- **新メッセージの命名**：`set_*` / `list_*` で統一。レスポンスは過去完了系（`click_through`, `monitor_list`）。HANDOFF の将来機能 `position_changed` と整合
+
+### 追加したメッセージ
+- `set_click_through { enabled }` → `click_through { enabled }`
+- `list_monitors` → `monitor_list { monitors: [...] }`
+- `set_monitor { index }` → 配置成功時は無応答（副作用のみ）、範囲外なら `error { code: "monitor_out_of_range" }`
+
+### capabilities の拡張
+- Phase 1：`["transparency", "always-on-top"]`
+- Phase 2：`["transparency", "always-on-top", "click-through", "multi-monitor"]`
+- ready メッセージの JSON 長が 103 → 135 bytes になったので smoke test で確認
+
+### 試してみて分かったこと
+- Tauri 2.0 の `WebviewWindow::available_monitors()` は `Vec<Monitor>` を返す。`Monitor` 型は `Eq` を実装していないので `is_primary` 判定は position 比較で代用した（tauri 側で安定した識別子が無いため）
+- `Monitor::name()` は `Option<&String>`。Windows では `\\.\DISPLAY1` 形式、macOS では実名（"Built-in Retina" など）
+- 負の座標のマルチモニタ配置は Tauri が自動で仮想デスクトップ座標として解釈してくれる（Tao 内部で HMONITOR の virtual desktop 座標を使用）

@@ -28,8 +28,30 @@ pub enum InMessage {
         width: u32,
         height: u32,
     },
+    /// Phase 2: toggle WS_EX_TRANSPARENT (Win32) / ignoresMouseEvents (macOS).
+    SetClickThrough {
+        enabled: bool,
+    },
+    /// Phase 2: position on a specific monitor (bottom-center).
+    SetMonitor {
+        index: usize,
+    },
+    /// Phase 2: ask for the list of monitors + their geometry.
+    ListMonitors,
     Ping,
     Exit,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MonitorInfo {
+    pub index: usize,
+    pub name: Option<String>,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub scale_factor: f64,
+    pub is_primary: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -51,6 +73,12 @@ pub enum OutMessage<'a> {
         y: i32,
         width: u32,
         height: u32,
+    },
+    MonitorList {
+        monitors: Vec<MonitorInfo>,
+    },
+    ClickThrough {
+        enabled: bool,
     },
 }
 

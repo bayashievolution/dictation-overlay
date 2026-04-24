@@ -1,8 +1,8 @@
-# dictation-overlay — Native Messaging 仕様書 (v0.1.0)
+# dictation-overlay — Native Messaging 仕様書 (v0.2.0)
 
 > このドキュメントは **dictation-beta（Chrome 拡張）** 側で実装する Native Messaging 連携のための仕様書です。dictation-overlay 側（ネイティブヘルパー）がこの仕様を満たします。
 >
-> 対応バージョン：dictation-overlay v0.1.0（Phase 1 実装）
+> 対応バージョン：dictation-overlay v0.2.0（Phase 2 実装：クリックスルー + マルチモニタ）
 >
 > 最終更新：2026-04-25
 
@@ -120,6 +120,38 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 
 - 右クリックメニューからの手動移動との排他性は、拡張側で「自動配置モード／手動モード」フラグを持って制御する想定。
 
+#### `set_click_through` （v0.2.0〜）
+
+クリックスルーを ON/OFF する。ON の間は字幕窓上のマウス操作が全て下のアプリに抜ける。
+
+```json
+{ "type": "set_click_through", "enabled": true }
+```
+
+- 起動時のデフォルトは **ON**（オーバーレイの本質的要求）。
+- `false` を送ると窓をドラッグしたり右クリックメニューを開いたりできる（位置調整モード）。
+- Windows は `WS_EX_TRANSPARENT`、macOS は `NSWindow.ignoresMouseEvents` に対応。
+- 応答として `click_through` メッセージが返る（下記）。
+
+#### `list_monitors` （v0.2.0〜）
+
+接続中のモニタ一覧（ジオメトリ含む）を要求する。ネイティブは `monitor_list` を返す。
+
+```json
+{ "type": "list_monitors" }
+```
+
+#### `set_monitor` （v0.2.0〜）
+
+指定したモニタのインデックスに字幕窓を移動する（そのモニタの下部中央に自動配置）。
+
+```json
+{ "type": "set_monitor", "index": 1 }
+```
+
+- `index` は `list_monitors` で得たインデックスを使う。
+- 範囲外なら `error` (`code: "monitor_out_of_range"`) が返る。
+
 #### `ping`
 
 ヘルスチェック。ネイティブは `pong` を返す。
@@ -147,16 +179,17 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 ```json
 {
   "type": "ready",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "platform": "windows",
-  "capabilities": ["transparency", "always-on-top"]
+  "capabilities": ["transparency", "always-on-top", "click-through", "multi-monitor"]
 }
 ```
 
 - `platform`：`windows` / `macos` / `linux`
 - `capabilities`：ネイティブが実装している機能。拡張側で機能有無の判定に使う。
   - Phase 1：`["transparency", "always-on-top"]`
-  - Phase 2 以降：`click-through` / `multi-monitor` / `chroma-key` などが追加される予定
+  - **Phase 2 (v0.2.0)：`click-through` / `multi-monitor` が追加**
+  - Phase 3 以降：`chroma-key` / `position-report` / `context-menu` などが追加される予定
 
 #### `pong`
 
@@ -177,6 +210,50 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 - `code`：`parse` / `init_failed` / `internal` など
 - `message`：人間向け説明（ログ用）
 
+#### `click_through` （v0.2.0〜）
+
+`set_click_through` を受理して状態が変化した時に返す。
+
+```json
+{ "type": "click_through", "enabled": true }
+```
+
+#### `monitor_list` （v0.2.0〜）
+
+`list_monitors` への応答。インデックス 0 から順にモニタ情報を列挙。
+
+```json
+{
+  "type": "monitor_list",
+  "monitors": [
+    {
+      "index": 0,
+      "name": "\\\\.\\DISPLAY1",
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "scale_factor": 1.0,
+      "is_primary": true
+    },
+    {
+      "index": 1,
+      "name": "\\\\.\\DISPLAY2",
+      "x": 1920,
+      "y": 0,
+      "width": 2560,
+      "height": 1440,
+      "scale_factor": 1.0,
+      "is_primary": false
+    }
+  ]
+}
+```
+
+- `x` / `y`：仮想デスクトップ座標における左上原点（物理ピクセル）。
+- 負の値もあり得る（プライマリ以外が左／上にある場合）。
+- `scale_factor`：DPI スケーリング係数（Windows の HiDPI ディスプレイは 1.25〜2.0）。
+
 #### `position_changed`（将来）
 
 ユーザーが右クリックメニューやドラッグで手動移動・リサイズした時。拡張側は UI に反映する。
@@ -185,7 +262,7 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 { "type": "position_changed", "x": 100, "y": 900, "width": 1600, "height": 200 }
 ```
 
-Phase 1 の実装では未送信。Phase 3 で追加予定。
+Phase 2 の実装ではまだ未送信。Phase 3 で追加予定。
 
 ---
 
@@ -319,19 +396,20 @@ dictation-beta の `manifest.json` に `"nativeMessaging"` パーミッション
 
 ---
 
-## 10. Phase 1 実装時の制限
+## 10. 実装状況
 
-| 機能 | v0.1.0 対応 | 備考 |
+| 機能 | 対応バージョン | 備考 |
 |---|---|---|
-| `show_caption` / `hide_caption` | ✅ | |
-| `update_style` | ✅ | |
-| `set_position` | ✅ | |
-| `ping` / `pong` | ✅ | |
-| `exit` | ✅ | |
-| 透明背景 | ✅ | Tauri 2.0 の `transparent: true` |
-| 最前面 | ✅ | `alwaysOnTop: true` |
-| クリックスルー | ❌（Phase 2） | Win32 `WS_EX_TRANSPARENT` で実装予定 |
-| マルチモニタ選択 | ❌（Phase 2） | |
+| `show_caption` / `hide_caption` | v0.1.0 | |
+| `update_style` | v0.1.0 | |
+| `set_position` | v0.1.0 | |
+| `ping` / `pong` | v0.1.0 | |
+| `exit` | v0.1.0 | |
+| 透明背景 | v0.1.0 | Tauri 2.0 の `transparent: true` |
+| 最前面 | v0.1.0 | `alwaysOnTop: true` |
+| **クリックスルー** | **v0.2.0** | Tauri の `set_ignore_cursor_events`（Win32: `WS_EX_TRANSPARENT`） |
+| **`set_click_through`** | **v0.2.0** | 起動時デフォルト ON |
+| **`list_monitors` / `set_monitor`** | **v0.2.0** | プライマリモニタ下部中央に自動配置 |
 | 右クリックメニュー | ❌（Phase 3） | |
 | `position_changed` 通知 | ❌（Phase 3） | |
 | インストーラ（MSI） | ❌（Phase 3） | 現状は PowerShell スクリプト |

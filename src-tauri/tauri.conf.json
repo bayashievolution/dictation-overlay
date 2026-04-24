@@ -32,7 +32,12 @@
   "bundle": {
     "active": false,
     "targets": "all",
-    "icon": [],
+    "icon": [
+      "icons/icon-32.png",
+      "icons/icon-128.png",
+      "icons/icon-256.png",
+      "icons/icon.ico"
+    ],
     "category": "Utility",
     "copyright": "Copyright (c) 2026 bayashi",
     "shortDescription": "Transparent caption overlay native helper for dictation-beta"

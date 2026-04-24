@@ -175,3 +175,18 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - `NATIVE_MESSAGING_SPEC.md` を本リポジトリ直下に作成
   - dictation-beta 側のカルディ／カルディ2 がこれを読めば manifest.json 変更・connectNative 実装まで完了できる粒度
   - `capabilities` 配列で Phase 間の機能差を拡張側にネゴシエーションできるようにした
+
+### ビルド検証（2026-04-25 中の同日内）
+- WSL 共有越しに `cargo build` すると cargo の target/ を \\wsl.localhost\... に作ってしまい I/O が激遅
+  - → `CARGO_TARGET_DIR="C:/dev/dictation-overlay-target"` で Windows ローカル SSD に逃がした
+  - このパスは個人環境依存なので README と `.gitignore` に注記、リポジトリには含めない
+- 初回ビルド時の障害：`icons/icon.ico not found`
+  - tauri-build が Windows Resource ファイル生成のために必須。empty `bundle.icon` でも回避不可
+  - → PowerShell + `System.Drawing` で 32/128/256 PNG と ICO を生成して `src-tauri/icons/` に配置
+  - プレースホルダなので本番リリース前に差し替え予定（青地に白 `DO` の暫定ロゴ）
+- ワーキングディレクトリ混乱：Bash の `cd src-tauri` 後に再度 `cd src-tauri` してしまい `src-tauri/src-tauri/` 階層が生成された
+  - → 以後 `(cd src-tauri && cargo ...)` のようにサブシェルで実行するポリシーに
+- Smoke test：`printf '\x0f\x00\x00\x00{"type":"exit"}' | dictation-overlay.exe` で
+  - stdout 先頭に `ready` が length-prefix 付きで書き出されることを確認（103 bytes）
+  - `exit` メッセージを受けたらプロセスが正常終了することを確認
+  - WebView2 の stderr ログは native messaging では Chrome が吸わないので実害なし

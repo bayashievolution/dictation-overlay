@@ -214,3 +214,7 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - Tauri 2.0 の `WebviewWindow::available_monitors()` は `Vec<Monitor>` を返す。`Monitor` 型は `Eq` を実装していないので `is_primary` 判定は position 比較で代用した（tauri 側で安定した識別子が無いため）
 - `Monitor::name()` は `Option<&String>`。Windows では `\\.\DISPLAY1` 形式、macOS では実名（"Built-in Retina" など）
 - 負の座標のマルチモニタ配置は Tauri が自動で仮想デスクトップ座標として解釈してくれる（Tao 内部で HMONITOR の virtual desktop 座標を使用）
+
+### 実機検証状況（2026-04-25 時点）
+- ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
+- ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）

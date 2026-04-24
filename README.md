@@ -54,8 +54,14 @@ cargo build
 3. PowerShell で：
 
 ```powershell
-pwsh ./installer/register.ps1 -ExtensionId <拡張ID>
+# 初回のみ：このセッションだけスクリプト実行を許可（-Force で確認プロンプト無し）
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+# 登録
+.\installer\register.ps1 -ExtensionId <拡張ID> -ExePath C:\dev\dictation-overlay-target\debug\dictation-overlay.exe
 ```
+
+PowerShell 7 (`pwsh`) が入っていれば `pwsh .\installer\register.ps1 ...` でも可（`-Scope Process` の Bypass は PS7 でも必要）。
 
 これで：
 - `%LOCALAPPDATA%\Dictation\overlay\com.bayashi.dictation_overlay.json` が配置される
@@ -78,7 +84,8 @@ echo -ne '\x0f\x00\x00\x00{"type":"exit"}' | C:/dev/dictation-overlay-target/deb
 ### アンインストール
 
 ```powershell
-pwsh ./installer/unregister.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+.\installer\unregister.ps1
 ```
 
 Registry 登録と manifest ファイルを削除する（`-KeepManifest` で manifest は残せる）。

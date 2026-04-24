@@ -1,3 +1,8 @@
+# Claude Code / tooling
+.claude/
+.DS_Store
+Thumbs.db
+
 # Rust / Cargo
 /target/
 /src-tauri/target/
@@ -6,11 +11,9 @@ Cargo.lock.old
 
 # Node
 node_modules/
-dist/
-.DS_Store
+/dist/
 
 # OS / Editor
-Thumbs.db
 .vscode/
 .idea/
 
@@ -18,5 +21,10 @@ Thumbs.db
 *.log
 /src-tauri/gen/schemas/
 
-# Claude Code
-.claude/settings.local.json
+# ビルド成果物
+*.exe
+*.dmg
+*.msi
+*.app
+*.deb
+*.rpm

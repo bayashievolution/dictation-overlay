@@ -1,0 +1,9 @@
+{
+  "name": "com.bayashi.dictation_overlay",
+  "description": "dictation-overlay native host (transparent caption overlay for dictation-beta)",
+  "path": "REPLACE_WITH_ABSOLUTE_PATH_TO_overlay.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://REPLACE_WITH_EXTENSION_ID/"
+  ]
+}

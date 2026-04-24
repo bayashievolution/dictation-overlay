@@ -138,3 +138,40 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - **Document PiP で代替できるか検討** → Chrome のタイトルバー固定、透過不可、クリックスルー不可で却下
 - **Electron vs Tauri 検討** → 配布サイズ・起動時間で Tauri を第一選択、Electron はプロトタイプ用 backup
 - **OS 対応順** → Windows 最優先（やっさん環境）、macOS 次、Linux 最後
+
+## 試行錯誤ログ — 2026-04-25 Phase 1 開始
+
+### 環境セットアップ
+- Rust ツールチェーン未導入 → `winget install Rustlang.Rustup` で 1.95.0 stable 導入
+- MSVC 未導入 → `winget install Microsoft.VisualStudio.2022.BuildTools` でバックグラウンド導入
+  - Tauri の Windows ビルドは `x86_64-pc-windows-msvc` がデフォルト。GNU target でも動くが WebView2 周りとの相性で MSVC 推奨。
+- Username に日本語（`ばやし`）が含まれるため PATH 設定が扱いにくい → フルパス `/c/Users/ばやし/.cargo/bin/cargo.exe` で運用
+- Git 側：WSL 経由のワークツリーは `safe.directory` 例外登録が必要（Windows ホストから WSL 共有を叩くため）
+
+### プロジェクト骨組みの判断
+- **Tauri プロジェクト雛形は `cargo create-tauri-app` ではなく手書き** にした。理由：
+  - フロントエンドは静的 HTML/CSS/JS のみで十分（字幕 1 行の描画、フレームワークは過剰）
+  - `frontendDist: "../src"` で `src/` の生ファイルをそのままロード、ビルドステップなし
+  - `withGlobalTauri: true` で `window.__TAURI__` を生 JS から触れる
+- **Native Messaging の stdio と Tauri イベントループの合流**：
+  - `std::io::stdin()` は同期ブロッキングなので、setup 時に別スレッドを spawn して読む
+  - 受信した InMessage を `AppHandle::emit` で WebView に送る
+  - stdout 書き込みは `Mutex<()>` で直列化（将来 `position_changed` などを Rust 側から非同期に送るときのため）
+- **エントリポイント**：`#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`
+  - debug は console（手動起動でログを見る用）
+  - release は windows（Chrome から起動される本番用、コンソール窓を出さない）
+- **ウィンドウ初期可視性**：`visible: false`。`show_caption` 受信でのみ `show()`、`hide_caption` で `hide()`
+- **CSS の `box-shadow: 0 0 0 transparent`** を敢えて入れてる：将来 Phase 2 でクリックスルー状態の視覚フィードバックに使う予定の土台
+
+### Phase 1 スコープで **敢えてやらない** こと（Phase 2 以降）
+- クリックスルー（`WS_EX_TRANSPARENT`）— Tauri の `set_ignore_cursor_events` があるが、HANDOFF 通り Phase 2 で本格対応
+- マルチモニタ選択 UI
+- 右クリックメニュー
+- `position_changed` のネイティブ → 拡張通知
+- MSI インストーラ（今は PowerShell `register.ps1`）
+- macOS / Linux
+
+### dictation-beta との連携準備
+- `NATIVE_MESSAGING_SPEC.md` を本リポジトリ直下に作成
+  - dictation-beta 側のカルディ／カルディ2 がこれを読めば manifest.json 変更・connectNative 実装まで完了できる粒度
+  - `capabilities` 配列で Phase 間の機能差を拡張側にネゴシエーションできるようにした

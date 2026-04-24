@@ -1,0 +1,22 @@
+# Rust / Cargo
+/target/
+/src-tauri/target/
+**/*.rs.bk
+Cargo.lock.old
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# OS / Editor
+Thumbs.db
+.vscode/
+.idea/
+
+# Local dev
+*.log
+/src-tauri/gen/schemas/
+
+# Claude Code
+.claude/settings.local.json

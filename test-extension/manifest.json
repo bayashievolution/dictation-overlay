@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "dictation-overlay test harness",
+  "version": "0.1.0",
+  "description": "Phase 1 verification harness — sends test captions to dictation-overlay via Chrome Native Messaging.",
+  "permissions": ["nativeMessaging", "storage"],
+  "action": {
+    "default_title": "dictation-overlay test",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

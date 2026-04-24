@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>dictation-overlay test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 12px;
+      width: 320px;
+      font-family: 'Yu Gothic UI', system-ui, sans-serif;
+      font-size: 13px;
+      background: #1a1a1a;
+      color: #eee;
+    }
+    h1 { font-size: 14px; margin: 0 0 10px; }
+    button {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      margin: 4px 0;
+      background: #2d6cdf;
+      color: #fff;
+      border: 0;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { background: #3e7ff0; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+    button.danger { background: #b03030; }
+    button.danger:hover { background: #c04040; }
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px;
+      margin: 4px 0;
+      background: #111;
+      color: #eee;
+      border: 1px solid #333;
+      border-radius: 4px;
+      resize: vertical;
+      min-height: 50px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    #status {
+      margin-top: 10px;
+      padding: 6px;
+      border-radius: 4px;
+      background: #111;
+      font-family: 'Consolas', monospace;
+      font-size: 11px;
+      white-space: pre-wrap;
+      max-height: 120px;
+      overflow: auto;
+    }
+    .row { display: flex; gap: 6px; }
+    .row button { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>dictation-overlay テスト</h1>
+
+  <div class="row">
+    <button id="connect">接続</button>
+    <button id="disconnect" class="secondary">切断</button>
+  </div>
+
+  <textarea id="text" placeholder="送信する字幕テキスト">こんにちは、dictation-overlay の\n動作確認中です →</textarea>
+
+  <button id="show">show_caption 送信</button>
+  <button id="hide" class="secondary">hide_caption</button>
+  <button id="ping" class="secondary">ping</button>
+  <button id="exit" class="danger">exit（ネイティブ終了）</button>
+
+  <div id="status">未接続</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Claude Code / tooling
+.claude/
+.DS_Store
+Thumbs.db
+
+# Rust / Tauri（将来用）
+/target/
+/dist/
+node_modules/
+
+# ビルド成果物
+*.exe
+*.dmg
+*.msi
+*.app
+*.deb
+*.rpm

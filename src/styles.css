@@ -44,3 +44,29 @@ html, body {
      dictation-beta v0.13.4 で同じ症状を実証済み。 */
   paint-order: stroke fill;
 }
+
+/* v0.3.6: テキストトランジション。
+   dictation-beta のストリームモード（150〜800ms 間隔で text が変わる）で「入ってくる感」を出す。
+   show_caption 受信時に main.js が該当クラスを付け直して再トリガする。
+   duration は 180ms、字幕の更新頻度を考えてサクッと終わる長さ。 */
+.caption.anim-fade        { animation: cap-fade-in     180ms ease both; }
+.caption.anim-slide-right { animation: cap-slide-right 180ms ease both; }
+.caption.anim-slide-left  { animation: cap-slide-left  180ms ease both; }
+.caption.anim-scroll-up   { animation: cap-scroll-up   180ms ease both; }
+
+@keyframes cap-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes cap-slide-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes cap-slide-left {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes cap-scroll-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

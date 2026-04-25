@@ -219,6 +219,29 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.6 — テキストトランジション 5 種
+
+dictation-beta カルディ２からの依頼。dictation-beta v0.13.12 で「ストリームモード」が追加され、`show_caption.text` が 150〜800ms 間隔で連発されるようになった。今までは丸ごと書き換えるだけでスクロール感がない。字幕ウィンドウと同じ CSS トランジションを overlay にも入れて見た目を揃えてほしい、という要望。
+
+#### 実装
+- `src/styles.css`：4 種類の keyframes 追加（fade / slide-right / slide-left / scroll-up）。duration 180ms、字幕の更新頻度に合わせサクッと終わる長さ
+- `src/main.js`：
+  - `lastText` を保持し、`setText()` で同じテキスト再送時はアニメーション抑制（スタイル変更だけのときムダに走らせない）
+  - `applySettings()` で `settings.transition` を解釈、`currentTransition` を更新
+  - text 変化時に `caption.classList.remove(...)` → `void offsetWidth`（reflow）→ `add(cls)` で再トリガ
+- `src-tauri/src/main.rs`：CAPABILITIES に `"transition"` を追加（拡張側のフィーチャ判定用）
+- `NATIVE_MESSAGING_SPEC.md`：`settings.transition` フィールドの仕様を追記、capability 一覧と実装状況表を更新
+
+#### 設計判断
+- **デフォルトは `"none"`**：CLAUDE.md ルール 8（保険・念のためで既存挙動を変えない）に従い、v0.3.5 以前と同じ「即時書き換え」を後方互換で維持。dictation-beta が明示的に `"fade"` 等を送ってきた時だけアニメーションが走る
+- **同じ text の再送ではアニメーションを抑制**：`update_style` 後に `show_caption` で同じ text が来るケースなど、スタイルだけ変えたい時にチカチカするのを防ぐ
+- **TRANSITION_CLASSES の制限**：未知の transition 値（タイポなど）は無視して現在値を保持。安全側
+- **CSS animation, not transition**：CSS `transition` プロパティは property 値の変化トリガで動くが、テキスト変化トリガには使えない。`animation` をクラス付け替えで再生する方式
+
+#### 拡張側との連携
+- dictation-beta v0.13.12 のストリームモードで `transition: "scroll-up"` を送ってもらえばスクロール感が出る
+- `capabilities` に `"transition"` が無いバージョンの overlay に送ってもエラーにならない（settings の未知フィールドは無視されるだけ）→ 後方互換 OK
+
 ### v0.3.5 — 縁取りの字画虫食いを解消（paint-order: stroke fill）
 
 dictation-beta カルディ２からの修正提案。`-webkit-text-stroke` で文字に縁取りを付けると、デフォルトの描画順では fill → stroke の順で重なり、隣の文字の stroke が前の文字の fill に上から書かれてしまう。結果、字画の境界が虫食い状にギザギザになる（やっさんスクショ：右が問題状態、左が修正後）。

@@ -22,6 +22,7 @@ const CAPABILITIES: &[&str] = &[
     "multi-monitor",
     "position-report",
     "tray-menu",
+    "transition",
 ];
 
 /// Bottom margin (px) when auto-positioning on a monitor.

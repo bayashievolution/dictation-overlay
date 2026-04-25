@@ -1,8 +1,8 @@
-# dictation-overlay — Native Messaging 仕様書 (v0.3.0)
+# dictation-overlay — Native Messaging 仕様書 (v0.3.1)
 
 > このドキュメントは **dictation-beta（Chrome 拡張）** 側で実装する Native Messaging 連携のための仕様書です。dictation-overlay 側（ネイティブヘルパー）がこの仕様を満たします。
 >
-> 対応バージョン：dictation-overlay v0.3.0（Phase 3a：`position_changed` + `goodbye`）
+> 対応バージョン：dictation-overlay v0.3.1（Phase 3b：システムトレイメニュー）
 >
 > 最終更新：2026-04-25
 
@@ -179,9 +179,12 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 ```json
 {
   "type": "ready",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "platform": "windows",
-  "capabilities": ["transparency", "always-on-top", "click-through", "multi-monitor", "position-report"]
+  "capabilities": [
+    "transparency", "always-on-top", "click-through",
+    "multi-monitor", "position-report", "tray-menu"
+  ]
 }
 ```
 
@@ -189,7 +192,8 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 - `capabilities`：ネイティブが実装している機能。拡張側で機能有無の判定に使う。
   - Phase 1：`["transparency", "always-on-top"]`
   - Phase 2 (v0.2.0)：`click-through` / `multi-monitor` が追加
-  - **Phase 3a (v0.3.0)：`position-report` が追加**（`position_changed` メッセージが届くようになる）
+  - Phase 3a (v0.3.0)：`position-report` が追加（`position_changed` メッセージが届くようになる）
+  - **Phase 3b (v0.3.1)：`tray-menu` が追加**（ユーザーが OS のシステムトレイから操作できる。ON/OFF 切替や終了が拡張 UI 経由でなくても可能）
   - Phase 3 以降：`chroma-key` / `context-menu` などが追加される予定
 
 #### `pong`
@@ -310,9 +314,10 @@ function onOverlayPositionChanged(evt) {
 { "type": "goodbye", "reason": "exit_requested" }
 ```
 
-`reason` の取り得る値（v0.3.0 時点）：
+`reason` の取り得る値（v0.3.1 時点）：
 - `"exit_requested"` — 拡張から `exit` メッセージを受け取って終了する場合
-- 将来：`"user_close"`（右クリックメニュー終了 / Phase 3b 以降）/ `"shutting_down"`（OS シャットダウン等）
+- **`"user_close"`** — システムトレイメニューから「オーバーレイを終了」を選んだ場合（v0.3.1〜）
+- 将来：`"shutting_down"`（OS シャットダウン等）
 
 ##### 拡張側の使い方
 
@@ -490,11 +495,28 @@ dictation-beta の `manifest.json` に `"nativeMessaging"` パーミッション
 | クリックスルー | v0.2.0 | Tauri の `set_ignore_cursor_events`（Win32: `WS_EX_TRANSPARENT`） |
 | `set_click_through` | v0.2.0 | 起動時デフォルト ON |
 | `list_monitors` / `set_monitor` | v0.2.0 | プライマリモニタ下部中央に自動配置 |
-| **`position_changed` 通知** | **v0.3.0** | デバウンス〜150ms、物理ピクセル |
-| **`goodbye` 予告メッセージ** | **v0.3.0** | `port.onDisconnect` の意味づけヒント |
-| 右クリックメニュー / トレイアイコン | ❌（Phase 3b） | |
+| `position_changed` 通知 | v0.3.0 | デバウンス〜150ms、物理ピクセル |
+| `goodbye` 予告メッセージ | v0.3.0 | `port.onDisconnect` の意味づけヒント |
+| **システムトレイメニュー** | **v0.3.1** | クリックスルー切替・字幕表示切替・現在位置通知・終了 |
+| **`reason: "user_close"`** | **v0.3.1** | トレイ「終了」での閉じ |
+| 右クリックメニュー（ウィンドウ上） | ❌（後回し） | クリックスルー OFF 中限定で価値が低いので保留 |
 | インストーラ（Inno Setup） | ❌（Phase 3c） | 現状は PowerShell スクリプト |
 | macOS / Linux | ❌（Phase 3+） | Windows 優先 |
+
+## 12. システムトレイメニュー（v0.3.1〜）
+
+タスクバー右下のシステムトレイに dictation-overlay アイコンが常駐する。クリックすると以下のメニューが出る：
+
+| 項目 | 動作 | 同期 |
+|---|---|---|
+| クリックスルー有効（チェック式） | ON/OFF を切り替え。ON で字幕窓は完全にイベントスルー | チェック状態は拡張からの `set_click_through` でも自動同期 |
+| 字幕を表示中（チェック式） | 字幕窓を show/hide | `show_caption` / `hide_caption` でも自動同期 |
+| 現在位置を通知 | 強制的に `position_changed` を 1 回送る | デバッグ・初期同期用 |
+| オーバーレイを終了 | `goodbye {reason: "user_close"}` を送ってからプロセス終了 | 拡張側の `onDisconnect` で計画的終了として扱える |
+
+**設計意図**：拡張 UI に依存せず、ユーザーが必要に応じて OS から直接オーバーレイを制御できる。特にクリックスルー ON で字幕窓に直接触れられない時、トレイは唯一の介入手段。
+
+**拡張側の追加実装は不要**：トレイ操作は全て stdio 経由でメッセージ送信に変換される（`click_through` / `goodbye` など、既存のメッセージ型）ので、拡張は今まで通り受け取るだけで挙動が反映される。
 
 ---
 

@@ -219,6 +219,23 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.1 — Phase 3b: システムトレイメニュー
+
+#### 設計判断
+- **HTML右クリックメニュー（ウィンドウ上で右クリック）は今回見送り**
+  - クリックスルー ON 中は OS が右クリックも下のアプリへ流すため、メニューを開けない
+  - クリックスルー OFF 中だけで動かしてもユーザーは結局トレイ経由で OFF にする必要があるので、トレイで全部完結させる方が UX が一貫する
+  - 仕様書の「実装状況」表に「保留」と明記
+- **トレイメニューは Tauri 2.0 の `tray-icon` feature** を使用。Cargo.toml に `features = ["tray-icon"]` を追加。`tauri-plugin-*` ではなく core 機能なので依存追加は最小限
+- **CheckMenuItem の状態同期**：トレイから ON/OFF した時はメニュー側で auto-toggle されるが、拡張からの `set_click_through` や `show_caption` で状態が変わる時はトレイメニューが古い値を表示してしまう。`Manager::manage(MenuHandles)` で `CheckMenuItem` の Clone を保管 → `handle_message` から `app.try_state::<MenuHandles>()` で取り出して `set_checked` する `sync_*` ヘルパーを書いた
+- **トレイ「終了」の goodbye reason**：`"user_close"`。`exit_requested`（拡張から）と区別することで、拡張側 UI が「ユーザーがトレイから閉じた」を表示できる
+- **show_menu_on_left_click(true)**：Windows 慣習では左クリック=デフォルトアクション、右クリック=メニュー。だが本プロダクトには「メイン UI」がない（オーバーレイは UI ではなく字幕表示）ので、左右どちらでもメニューを出す方がユーザーが迷わない
+
+#### 効果
+- クリックスルー ON 中でも、ユーザーがトレイから即座に OFF にできるようになった（位置調整が物理的に可能に）
+- 拡張がクラッシュした／port を閉じ忘れた状況でも、ユーザーがトレイから「終了」を押せばプロセスは確実に死ぬ
+- 拡張側の追加実装は不要。capabilities に `tray-menu` を加えただけで、メッセージ型は既存の click_through / goodbye / position_changed をそのまま流用
+
 ### v0.3.0 — Phase 3a: position_changed + goodbye
 
 dictation-beta カルディ２から Phase 3 GO サインをもらって着手。3 サブフェーズに分割：

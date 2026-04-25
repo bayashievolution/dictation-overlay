@@ -47,17 +47,17 @@
       font-family: inherit;
       font-size: 12px;
     }
-    #status {
-      margin-top: 10px;
+    #status, #position {
+      margin-top: 6px;
       padding: 6px;
       border-radius: 4px;
       background: #111;
       font-family: 'Consolas', monospace;
       font-size: 11px;
       white-space: pre-wrap;
-      max-height: 140px;
-      overflow: auto;
     }
+    #status { max-height: 120px; overflow: auto; }
+    #position { color: #8fc1ff; }
     .row { display: flex; gap: 6px; }
     .row button { flex: 1; margin: 3px 0; }
   </style>
@@ -92,6 +92,9 @@
     <button id="mon-1" class="secondary">#1</button>
     <button id="mon-2" class="secondary">#2</button>
   </div>
+
+  <h2>Phase 3a — position_changed（自動受信）</h2>
+  <div id="position">未受信</div>
 
   <h2>終了</h2>
   <button id="exit" class="danger">exit（ネイティブ終了）</button>

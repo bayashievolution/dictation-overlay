@@ -67,7 +67,8 @@ pub enum OutMessage<'a> {
         code: &'a str,
         message: String,
     },
-    #[allow(dead_code)]
+    /// Phase 3a: emitted whenever the user moves or resizes the overlay
+    /// (debounced ~150ms). Coordinates are physical pixels in virtual desktop space.
     PositionChanged {
         x: i32,
         y: i32,
@@ -79,6 +80,12 @@ pub enum OutMessage<'a> {
     },
     ClickThrough {
         enabled: bool,
+    },
+    /// Phase 3a: sent right before the native host exits intentionally.
+    /// Lets the extension distinguish a planned shutdown from a crash on the
+    /// `port.onDisconnect` event that follows.
+    Goodbye {
+        reason: &'a str,
     },
 }
 

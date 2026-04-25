@@ -1,8 +1,8 @@
-# dictation-overlay — Native Messaging 仕様書 (v0.2.0)
+# dictation-overlay — Native Messaging 仕様書 (v0.3.0)
 
 > このドキュメントは **dictation-beta（Chrome 拡張）** 側で実装する Native Messaging 連携のための仕様書です。dictation-overlay 側（ネイティブヘルパー）がこの仕様を満たします。
 >
-> 対応バージョン：dictation-overlay v0.2.0（Phase 2 実装：クリックスルー + マルチモニタ）
+> 対応バージョン：dictation-overlay v0.3.0（Phase 3a：`position_changed` + `goodbye`）
 >
 > 最終更新：2026-04-25
 
@@ -179,17 +179,18 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 ```json
 {
   "type": "ready",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "platform": "windows",
-  "capabilities": ["transparency", "always-on-top", "click-through", "multi-monitor"]
+  "capabilities": ["transparency", "always-on-top", "click-through", "multi-monitor", "position-report"]
 }
 ```
 
 - `platform`：`windows` / `macos` / `linux`
 - `capabilities`：ネイティブが実装している機能。拡張側で機能有無の判定に使う。
   - Phase 1：`["transparency", "always-on-top"]`
-  - **Phase 2 (v0.2.0)：`click-through` / `multi-monitor` が追加**
-  - Phase 3 以降：`chroma-key` / `position-report` / `context-menu` などが追加される予定
+  - Phase 2 (v0.2.0)：`click-through` / `multi-monitor` が追加
+  - **Phase 3a (v0.3.0)：`position-report` が追加**（`position_changed` メッセージが届くようになる）
+  - Phase 3 以降：`chroma-key` / `context-menu` などが追加される予定
 
 #### `pong`
 
@@ -254,15 +255,94 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 - 負の値もあり得る（プライマリ以外が左／上にある場合）。
 - `scale_factor`：DPI スケーリング係数（Windows の HiDPI ディスプレイは 1.25〜2.0）。
 
-#### `position_changed`（将来）
+#### `position_changed` （v0.3.0〜）
 
-ユーザーが右クリックメニューやドラッグで手動移動・リサイズした時。拡張側は UI に反映する。
+ユーザーが手動でドラッグ移動・リサイズした時、ネイティブ側からデバウンス付き（〜150ms）で送られる。
 
 ```json
 { "type": "position_changed", "x": 100, "y": 900, "width": 1600, "height": 200 }
 ```
 
-Phase 2 の実装ではまだ未送信。Phase 3 で追加予定。
+- 座標は **物理ピクセル / 仮想デスクトップ空間**（複数モニタの場合は負値もあり得る）。
+- `set_position` / `set_monitor` でプログラム的に位置変更した時にも飛ぶ可能性がある（実装上は OS 起点のイベントを拾うため）。
+- 拡張側で UI（位置表示ラベルなど）の同期に使える。
+
+##### 物理ピクセル → 論理ピクセル変換とモニタ識別
+
+`position_changed` の `x` / `y` を `monitor_list` の結果と組み合わせれば「どのモニタの何 px か」を特定できる：
+
+```js
+function onOverlayPositionChanged(evt) {
+  // どのモニタ上にあるか
+  const m = overlayState.monitors.find(
+    mi => evt.x >= mi.x && evt.x < mi.x + mi.width
+       && evt.y >= mi.y && evt.y < mi.y + mi.height
+  );
+
+  if (!m) {
+    // モニタにまたがっているか、Phase 2 で取った monitor_list より後に
+    // モニタ構成が変わった（ホットプラグ等）。再 list_monitors 推奨。
+    ui.posLabel.textContent = `仮想 (${evt.x}, ${evt.y}) ${evt.width}×${evt.height}`;
+    return;
+  }
+
+  // モニタ内のローカル座標
+  const localX = evt.x - m.x;
+  const localY = evt.y - m.y;
+
+  // CSS px（論理ピクセル）で見せたいときは scale_factor で割る
+  const cssX = localX / m.scale_factor;
+  const cssY = localY / m.scale_factor;
+
+  ui.posLabel.textContent =
+    `モニタ #${m.index} (${Math.round(cssX)}, ${Math.round(cssY)} CSSpx) ` +
+    `${Math.round(evt.width / m.scale_factor)}×${Math.round(evt.height / m.scale_factor)}`;
+}
+```
+
+`scale_factor` は HiDPI ディスプレイで 1.25 / 1.5 / 2.0 などになる（`monitor_list` の各モニタに含まれる）。
+
+#### `goodbye` （v0.3.0〜）
+
+ネイティブが**意図的にプロセス終了する直前**に 1 回だけ送る予告メッセージ。`port.onDisconnect` がこの直後に発火する。
+
+```json
+{ "type": "goodbye", "reason": "exit_requested" }
+```
+
+`reason` の取り得る値（v0.3.0 時点）：
+- `"exit_requested"` — 拡張から `exit` メッセージを受け取って終了する場合
+- 将来：`"user_close"`（右クリックメニュー終了 / Phase 3b 以降）/ `"shutting_down"`（OS シャットダウン等）
+
+##### 拡張側の使い方
+
+`goodbye` を見たら「意図的終了」フラグを立てておけば、続く `onDisconnect` を「予期した切断」と扱えてエラー UI を出さずに済む：
+
+```js
+let _intentionalClose = false;
+
+port.onMessage.addListener((msg) => {
+  if (msg.type === 'goodbye') {
+    _intentionalClose = true;
+    overlayState.lastGoodbyeReason = msg.reason;
+  }
+  // ...
+});
+
+port.onDisconnect.addListener(() => {
+  const err = chrome.runtime.lastError;
+  if (_intentionalClose) {
+    // ユーザー操作で計画的に閉じた。エラー UI 不要。
+    notifyOverlayClosed(overlayState.lastGoodbyeReason);
+  } else {
+    // 予期せぬ切断。クラッシュした可能性あり。
+    notifyOverlayCrashed(err && err.message);
+  }
+  _intentionalClose = false;
+});
+```
+
+> `goodbye` は **best-effort** な予告で、確約された配信ではない（クラッシュ時は当然飛ばない）。あくまで `onDisconnect` の意味づけを助けるためのヒント。
 
 ---
 
@@ -407,12 +487,13 @@ dictation-beta の `manifest.json` に `"nativeMessaging"` パーミッション
 | `exit` | v0.1.0 | |
 | 透明背景 | v0.1.0 | Tauri 2.0 の `transparent: true` |
 | 最前面 | v0.1.0 | `alwaysOnTop: true` |
-| **クリックスルー** | **v0.2.0** | Tauri の `set_ignore_cursor_events`（Win32: `WS_EX_TRANSPARENT`） |
-| **`set_click_through`** | **v0.2.0** | 起動時デフォルト ON |
-| **`list_monitors` / `set_monitor`** | **v0.2.0** | プライマリモニタ下部中央に自動配置 |
-| 右クリックメニュー | ❌（Phase 3） | |
-| `position_changed` 通知 | ❌（Phase 3） | |
-| インストーラ（MSI） | ❌（Phase 3） | 現状は PowerShell スクリプト |
+| クリックスルー | v0.2.0 | Tauri の `set_ignore_cursor_events`（Win32: `WS_EX_TRANSPARENT`） |
+| `set_click_through` | v0.2.0 | 起動時デフォルト ON |
+| `list_monitors` / `set_monitor` | v0.2.0 | プライマリモニタ下部中央に自動配置 |
+| **`position_changed` 通知** | **v0.3.0** | デバウンス〜150ms、物理ピクセル |
+| **`goodbye` 予告メッセージ** | **v0.3.0** | `port.onDisconnect` の意味づけヒント |
+| 右クリックメニュー / トレイアイコン | ❌（Phase 3b） | |
+| インストーラ（Inno Setup） | ❌（Phase 3c） | 現状は PowerShell スクリプト |
 | macOS / Linux | ❌（Phase 3+） | Windows 優先 |
 
 ---

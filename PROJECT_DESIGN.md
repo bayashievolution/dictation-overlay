@@ -219,6 +219,24 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.0 — Phase 3a: position_changed + goodbye
+
+dictation-beta カルディ２から Phase 3 GO サインをもらって着手。3 サブフェーズに分割：
+
+- **3a (このバージョン)**: `position_changed` 通知 + `goodbye` 予告（小・連携層）
+- 3b (次): システムトレイアイコン + 右クリックメニュー
+- 3c (次): Inno Setup インストーラ
+
+#### 設計判断
+- **position_changed のデバウンス**：OS は move/resize イベントを 60〜100Hz で打つので、毎回送ると拡張側があふれる。バックグラウンドスレッドで 150ms に 1 回 dirty フラグをドレインして送る方式に。leading edge ではなく trailing edge（最新値が必ず届く）にすることで、ドラッグ終端の正しい位置を必ず通知できる
+- **GEOMETRY_DIRTY を AtomicBool で**：`Mutex<Instant>` で時刻ベースの debounce も可能だが、複雑。フラグ + 固定間隔ループのほうが読みやすく、CPU コストもほぼゼロ（150ms に 1 回しか走らない）
+- **`goodbye { reason }` を OutMessage に追加**：dictation-beta カルディ２との議論で決めた A 案（予告メッセージ）を採用。さらに拡張側でフラグ運用する B 案も併用するのが推し（仕様書に記載）。今回は `exit_requested` のみ。Phase 3b で右クリック終了用に `user_close` を追加予定
+- **`stdin EOF → app.exit(0)` のときは goodbye 不要**：Chrome 側の disconnect が起点なので、拡張側はもう port が閉じていることを知っている。送ろうとしても stdout が壊れている可能性が高い
+- **capabilities に `position-report` を追加**：`position_changed` を受け取る前提で UI を組むかどうかの拡張側判定に使える
+
+#### 試した気持ち悪さ
+- `WindowEvent::Moved` は WebView 内のウィンドウ移動（タイトルバードラッグ等）を拾う。クリックスルー ON 中は OS はそもそもイベントを発火しない（マウスが下のアプリへ抜ける）。でも `set_position` プログラム的呼び出しでも Moved が飛ぶので、`position_changed` が起こり得る → 拡張側は idempotent に扱うべき（実装済みのサンプルコードはそうなってる）
+
 ### v0.2.1 — register.ps1 複数ID対応
 dictation-beta カルディ２からの依頼で `installer/register.ps1` を改修。背景：
 - 開発期は test-extension（接続検証用）と dictation-beta（本物）の **両方を同時に繋ぎたい**

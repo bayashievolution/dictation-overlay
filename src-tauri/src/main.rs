@@ -2,10 +2,12 @@
 
 mod native_messaging;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
+use std::time::Duration;
 
-use tauri::{Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow, WindowEvent};
 
 use native_messaging::{read_message, send_message, InMessage, MonitorInfo, OutMessage};
 
@@ -14,13 +16,21 @@ const CAPABILITIES: &[&str] = &[
     "always-on-top",
     "click-through",
     "multi-monitor",
+    "position-report",
 ];
 
 /// Bottom margin (px) when auto-positioning on a monitor.
 const BOTTOM_MARGIN_PX: i32 = 80;
 
+/// How long to wait between position_changed emits (debounce).
+const POSITION_REPORT_INTERVAL_MS: u64 = 150;
+
 /// Serializes concurrent stdout writes.
 static STDOUT_LOCK: Mutex<()> = Mutex::new(());
+
+/// Set when the window emits a Moved or Resized event.
+/// The reporter thread clears it after sending one `position_changed`.
+static GEOMETRY_DIRTY: AtomicBool = AtomicBool::new(false);
 
 fn send(msg: &OutMessage) {
     let _g = STDOUT_LOCK.lock().ok();
@@ -35,11 +45,26 @@ fn main() {
             // Configure the main window:
             //   1. click-through on by default (the overlay is unusable otherwise).
             //   2. position on primary monitor, bottom-center.
+            //   3. install a window event listener that flags geometry changes.
+            //   4. start a thin background thread that drains the flag and emits
+            //      `position_changed` no more often than every 150ms.
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_ignore_cursor_events(true);
                 if let Ok(Some(m)) = w.primary_monitor() {
                     let _ = position_on_monitor_bottom(&w, &m, BOTTOM_MARGIN_PX);
                 }
+
+                w.on_window_event(|event| match event {
+                    WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+                        GEOMETRY_DIRTY.store(true, Ordering::Relaxed);
+                    }
+                    _ => {}
+                });
+
+                // Spawn the position reporter. It owns a clone of the window
+                // (cheap — WebviewWindow internally is an Arc-like handle).
+                let w_for_reporter = w.clone();
+                thread::spawn(move || position_reporter_loop(w_for_reporter));
             }
 
             // Announce readiness to Chrome extension.
@@ -63,6 +88,8 @@ fn stdin_loop(app: tauri::AppHandle) {
         match read_message() {
             Ok(None) => {
                 // stdin closed → Chrome disconnected → exit cleanly.
+                // No `goodbye`: the disconnect was Chrome-initiated, the extension
+                // already knows the port is gone.
                 app.exit(0);
                 return;
             }
@@ -142,8 +169,40 @@ fn handle_message(app: &tauri::AppHandle, msg: InMessage) {
             send(&OutMessage::Pong);
         }
         InMessage::Exit => {
+            // Announce intentional shutdown so the extension's onDisconnect
+            // handler can distinguish "we asked for it" from "the host crashed".
+            send(&OutMessage::Goodbye {
+                reason: "exit_requested",
+            });
             app.exit(0);
         }
+    }
+}
+
+/// Background loop that emits `position_changed` whenever the user has moved
+/// or resized the window since the last tick. Runs on its own thread so we
+/// never block the Tauri runtime.
+fn position_reporter_loop(window: WebviewWindow) {
+    let interval = Duration::from_millis(POSITION_REPORT_INTERVAL_MS);
+    loop {
+        thread::sleep(interval);
+        if !GEOMETRY_DIRTY.swap(false, Ordering::Relaxed) {
+            continue;
+        }
+        let pos = match window.outer_position() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let size = match window.outer_size() {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        send(&OutMessage::PositionChanged {
+            x: pos.x,
+            y: pos.y,
+            width: size.width,
+            height: size.height,
+        });
     }
 }
 

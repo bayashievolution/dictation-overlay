@@ -219,6 +219,25 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.5 — 縁取りの字画虫食いを解消（paint-order: stroke fill）
+
+dictation-beta カルディ２からの修正提案。`-webkit-text-stroke` で文字に縁取りを付けると、デフォルトの描画順では fill → stroke の順で重なり、隣の文字の stroke が前の文字の fill に上から書かれてしまう。結果、字画の境界が虫食い状にギザギザになる（やっさんスクショ：右が問題状態、左が修正後）。
+
+#### 修正
+- `src/styles.css` の `.caption` に **`paint-order: stroke fill`** を 1 行追加
+- ブラウザに「stroke を先、fill を後」で描画させる
+- これで stroke が外側に下層、fill が内側に上層として正しく重なり、字画が綺麗に分離する
+
+#### 仕組み
+- `paint-order` は SVG 由来のプロパティだが、CSS でも text rendering に効く
+- デフォルト：fill → stroke（後勝ち：stroke が外側を覆う、隣文字の stroke が前文字の fill に重なる）
+- 指定：stroke → fill（先描き：stroke が下層、fill が上層、字画ごとに正しく分離）
+- dictation-beta v0.13.4 で同じ症状を実証 → 修正済み。それを overlay 側にも反映
+
+#### 学び
+- 字幕系 UI で縁取りを使う時の定番ハマリ。`-webkit-text-stroke` を導入したらまず `paint-order: stroke fill` をセットで入れる癖を付ける
+- dictation-beta カルディ２が同じ問題を先に踏んで解決経路を確立してくれていたので、こちらは 1 行追加で済んだ。**カルディ２同士の直接連携が最大効率を発揮した好例**
+
 ### v0.3.4 — drag region をやり直し（v0.3.3 hotfix の hotfix）
 
 v0.3.3 で `-webkit-app-region: drag` を CSS に付けたが、やっさんの実機では効かなかった。

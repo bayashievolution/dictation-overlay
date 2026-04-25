@@ -38,4 +38,9 @@ html, body {
      html/body には drag を付けないこと（透過部分は素通りさせたい）。
      クリックスルー ON 時は OS レベルで全イベントが下に流れるので drag region は無効化される。 */
   -webkit-app-region: drag;
+  /* 縁取り (-webkit-text-stroke) を使う時、デフォルトでは「fill → stroke」順で描画されるため、
+     stroke が隣の文字の fill に上書きされて字画が虫食い状になる。
+     paint-order で「stroke → fill」順に明示すると、縁取り→塗り の正しい層順で描かれて綺麗。
+     dictation-beta v0.13.4 で同じ症状を実証済み。 */
+  paint-order: stroke fill;
 }

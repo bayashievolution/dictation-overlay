@@ -219,6 +219,23 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.4 — drag region をやり直し（v0.3.3 hotfix の hotfix）
+
+v0.3.3 で `-webkit-app-region: drag` を CSS に付けたが、やっさんの実機では効かなかった。
+
+**原因**：Tauri 2.0 では `-webkit-app-region: drag` はサポートが不確実。**`data-tauri-drag-region` HTML 属性**を要素に付けるのが Tauri 2.0 標準の正解。Tao 内部で WebView から DOM 走査してこの属性付き要素のヒットテストをタイトルバー扱いにしている。
+
+#### 修正
+- `src/index.html` の `.caption` div に **`data-tauri-drag-region`** 属性を追加
+- CSS の `-webkit-app-region: drag` は念のため残す（一部の WebView2 ビルドで効くこともある、害もない）
+- 実質「属性方式が主、CSS が補」な構成
+
+#### 学び
+- Tauri 1.x ↔ 2.0 の drag region 仕様変更は地味だが効く挙動が違う
+- 「Electron 流の `-webkit-app-region` を信じる」より、**Tauri 公式仕様（data-tauri-drag-region）を確認**すべきだった
+- WebKit/Chromium 系ブラウザでは `-webkit-app-region` は本来 Electron 専用 API、WebView2 は実装してない場合もある
+- v0.3.3 → v0.3.4 はソースコード読みでも気付けた事項。dictation-beta カルディ２の診断「drag region がない」は正しかったが、実装方法の選択を CSS に絞ってしまった点はわたしの責任
+
 ### v0.3.3 — ドラッグ移動の有効化（hotfix）
 
 dictation-beta カルディ２が、やっさんの実機検証中に発見：「クリックスルー OFF にしても字幕窓をマウスでつかんで動かせない」。`WindowEvent::Moved` リスナーは正しいが、そもそも OS が move を発火する条件（タイトルバー or drag region）が無かった。

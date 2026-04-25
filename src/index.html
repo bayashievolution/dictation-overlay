@@ -8,7 +8,10 @@
 </head>
 <body>
   <div id="stage">
-    <div id="caption" class="caption">dictation-overlay ready</div>
+    <!-- data-tauri-drag-region: Tauri 2.0 標準のドラッグ可能領域マーカー。
+         クリックスルー OFF 時に字幕ボックスをつかんで窓ごと動かせる。
+         (-webkit-app-region: drag は Tauri 2.x WebView2 だけだと効かないケースがあるため属性方式が確実) -->
+    <div id="caption" class="caption" data-tauri-drag-region>dictation-overlay ready</div>
   </div>
   <script src="main.js"></script>
 </body>

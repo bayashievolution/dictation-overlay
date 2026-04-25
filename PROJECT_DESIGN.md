@@ -219,6 +219,24 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.3 — ドラッグ移動の有効化（hotfix）
+
+dictation-beta カルディ２が、やっさんの実機検証中に発見：「クリックスルー OFF にしても字幕窓をマウスでつかんで動かせない」。`WindowEvent::Moved` リスナーは正しいが、そもそも OS が move を発火する条件（タイトルバー or drag region）が無かった。
+
+#### 修正
+- `src/styles.css` の `.caption` に **`-webkit-app-region: drag`** を 1 行追加
+- WebView2（Chromium）の標準 CSS で、Tauri がこれを HitTest::Caption 相当に変換してくれるので、字幕ボックスをつかんだドラッグで窓全体が動くようになる
+- 重要：**`html, body` には drag を付けない**。透過部分は今まで通りマウスが素通りする必要がある（クリックスルー OFF 中、字幕外の透明領域でクリックすると下のアプリへ）。`.caption` ボックス内だけ drag region
+
+#### Phase 2 のクリックスルーとの相互作用
+- **クリックスルー ON 中**：OS が WS_EX_TRANSPARENT で全マウスイベントを下のアプリに流すので、CSS の drag region 設定があっても効かない（期待通り）
+- **クリックスルー OFF 中**：drag region が効いて、字幕ボックスをドラッグすると窓が動く → `WindowEvent::Moved` 発火 → 150ms debounce で `position_changed` 送出
+- これで dictation-beta 側の `onOverlayPositionChanged`（v0.13.3 で実装済み）が「位置: モニタ #N (X, Y) W×H」をリアルタイム反映する
+
+#### 学び
+- 透過 + 装飾なし窓を作る時は、ドラッグできる「掴み代」を CSS で明示しないと窓が物理的に動かせない（タイトルバーに頼れない）
+- `WindowEvent::Moved` リスナーは正しく書いたつもりでも、**そもそも Move が発火しない**ケースが存在する。ソースコード読みで「リスナーがある」だけで安心せず、UX として動かす経路があるか確認する必要
+
 ### v0.3.2 — Phase 3c: Inno Setup インストーラ
 
 #### 設計判断

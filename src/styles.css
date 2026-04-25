@@ -34,4 +34,8 @@ html, body {
   background: rgba(0, 0, 0, 0.7);
   text-shadow: 0 0 6px #000;
   box-shadow: 0 0 0 transparent;
+  /* クリックスルー OFF 時に字幕ボックスをドラッグして窓ごと動かせるように。
+     html/body には drag を付けないこと（透過部分は素通りさせたい）。
+     クリックスルー ON 時は OS レベルで全イベントが下に流れるので drag region は無効化される。 */
+  -webkit-app-region: drag;
 }

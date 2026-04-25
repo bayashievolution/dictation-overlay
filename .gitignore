@@ -28,3 +28,6 @@ node_modules/
 *.app
 *.deb
 *.rpm
+
+# Inno Setup 出力
+/dist/

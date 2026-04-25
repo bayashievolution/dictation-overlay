@@ -95,15 +95,26 @@ foreach ($id in $ids) {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Split-Path -Parent $ScriptDir
 
+# 探索優先度:
+#   1. 明示指定された -ExePath
+#   2. インストール済みシナリオ: register.ps1 と同階層の dictation-overlay.exe
+#      （Inno Setup 製インストーラはこの構造で配置する）
+#   3. 開発シナリオ: <repo>\src-tauri\target\release\dictation-overlay.exe
+#   4. 開発シナリオ debug: <repo>\src-tauri\target\debug\dictation-overlay.exe
 if (-not $ExePath) {
-  $ExePath = Join-Path $RepoRoot 'src-tauri\target\release\dictation-overlay.exe'
+  $sibling = Join-Path $ScriptDir 'dictation-overlay.exe'
+  if (Test-Path $sibling) {
+    $ExePath = $sibling
+  } else {
+    $ExePath = Join-Path $RepoRoot 'src-tauri\target\release\dictation-overlay.exe'
+  }
 }
 if (-not (Test-Path $ExePath)) {
   $dbg = Join-Path $RepoRoot 'src-tauri\target\debug\dictation-overlay.exe'
   if (Test-Path $dbg) { $ExePath = $dbg }
 }
 if (-not (Test-Path $ExePath)) {
-  throw "overlay.exe が見つかりません: $ExePath`nまず 'cargo build --release' を実行してください。"
+  throw "overlay.exe が見つかりません: $ExePath`nまず 'cargo build --release' を実行するか、-ExePath で明示してください。"
 }
 $ExePath = (Resolve-Path $ExePath).Path
 

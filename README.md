@@ -99,6 +99,45 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 .\installer\unregister.ps1
 ```
 
+## 配布用インストーラ（Inno Setup）
+
+エンドユーザー向けの `.exe` インストーラを作るスクリプトを用意してあります。
+
+### 前提
+
+- [Inno Setup 6](https://jrsoftware.org/isdl.php) インストール済み（`ISCC.exe` がパスから or 既定の場所にあれば自動検出）
+- Rust release toolchain（`cargo build --release` が通る）
+
+### ビルド手順
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+.\installer\build-installer.ps1
+```
+
+これで以下が実行されます：
+
+1. `cargo build --release` → `src-tauri\target\release\dictation-overlay.exe`
+2. `ISCC.exe installer\dictation-overlay.iss` → `dist\dictation-overlay-setup-X.Y.Z.exe`
+
+### インストーラの動作
+
+- インストール先：`%LOCALAPPDATA%\Dictation\overlay\`
+- 配置されるファイル：
+  - `dictation-overlay.exe` 本体
+  - `register.ps1` / `unregister.ps1` 拡張ID登録スクリプト
+  - `icon.ico` / `POST_INSTALL.txt`
+- スタートメニューに3つのショートカット：
+  - 「dictation-overlay 拡張IDを登録」（PowerShell が `cd %LOCALAPPDATA%\...` 状態で開く）
+  - 「dictation-overlay 拡張IDを解除」
+  - 「アンインストール」
+- アンインストール時は Registry エントリと manifest も自動で削除（`unregister.ps1` を `runhidden` で呼ぶ）
+
+### 制限
+
+- 拡張 ID の入力ウィザードは未実装（Phase 4 で必要なら追加）。今はインストール直後に PowerShell が開くので、そこで `register.ps1 -ExtensionIds <ID> -Append` を打つ運用
+- 管理者権限不要（per-user インストール、HKCU のみ書き換え）
+
 Registry 登録と manifest ファイルを削除する（`-KeepManifest` で manifest は残せる）。
 
 ## プロジェクト構成

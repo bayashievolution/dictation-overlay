@@ -1,0 +1,39 @@
+dictation-overlay インストール完了
+====================================
+
+ネイティブ本体は %LOCALAPPDATA%\Dictation\overlay\dictation-overlay.exe に
+配置されました。
+
+ただし、Chrome 拡張から接続するためには **Native Messaging Host の登録**が
+別途必要です。インストーラはこの登録を行いません（拡張 ID をユーザーごとに
+個別に伝える必要があるため）。
+
+---
+
+【拡張IDを登録するには】
+
+1. dictation-beta（または dictation 安定版）を Chrome に読み込む
+2. chrome://extensions で拡張 ID を確認（32文字、a〜p）
+3. スタートメニューの「dictation-overlay 拡張IDを登録」を開く
+   → PowerShell が起動するので、表示された使い方に沿って実行：
+
+      .\register.ps1 -ExtensionIds <ID1>,<ID2> -Append
+
+   - 1 つだけなら       : .\register.ps1 -ExtensionId <ID>
+   - 複数まとめてなら   : .\register.ps1 -ExtensionIds <ID1>,<ID2>
+   - 既存にマージなら   : .\register.ps1 -ExtensionIds <追加ID> -Append
+
+4. Chrome を再起動 → 拡張から接続テスト
+
+---
+
+【アンインストール時】
+
+スタートメニューの「アンインストール」を実行すれば、本体ファイルと
+Registry の登録が両方削除されます。
+
+または、登録だけ外したい場合は「dictation-overlay 拡張IDを解除」を実行。
+
+---
+
+GitHub: https://github.com/bayashievolution/dictation-overlay

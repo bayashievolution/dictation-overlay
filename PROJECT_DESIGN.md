@@ -219,6 +219,31 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.2 — Phase 3c: Inno Setup インストーラ
+
+#### 設計判断
+- **インストーラは per-user (HKCU)** で固定。管理者権限プロンプトを避けてユーザーが気軽に試せる方を優先（`PrivilegesRequired=lowest`）
+- **インストール先 `%LOCALAPPDATA%\Dictation\overlay\`** は手動運用（`installer/register.ps1` 既定値）と一致
+- **拡張ID入力ウィザードは入れない**：Phase 4 では公式 dictation の拡張 ID を埋め込むだろうが、今は dev 用なので手動で `register.ps1` を打つ運用に。ただしインストール直後にスタートメニューから一発で PowerShell が「`cd %app%`」状態で開くようにして、コピペ 1 行で済むよう導線設計
+- **アンインストール時に `unregister.ps1` を `runhidden` で自動呼び出し**：Registry と manifest が確実に消える。`UninstallDelete: filesandordirs` で {app} ディレクトリも除去
+- **`InfoAfterFile=POST_INSTALL.txt`**：インストール完了画面で使い方が表示される。日本語で書いた
+
+#### register.ps1 の修正
+- `$ExePath` 解決順を変更し、**自分と同じディレクトリの dictation-overlay.exe** を最優先で見るようにした（インストール後シナリオ）。dev シナリオ（`<repo>\src-tauri\target\...`）は次点
+- これで dev 時もインストール後も同じ register.ps1 が動く
+
+#### build-installer.ps1
+- `cargo build --release` → `ISCC.exe dictation-overlay.iss` をワンショットで実行
+- ISCC.exe の自動検出（`Program Files`、`Program Files (x86)`、`LOCALAPPDATA\Programs` を順に探す）
+- 未検出時は Inno Setup の DL URL を案内して exit 1
+- `-SkipBuild` で cargo build をスキップ、`-IsccPath` で明示指定可能
+
+#### 試した時の注意点
+- `.iss` ファイルの `OutputDir=..\dist` は ISCC.exe の CWD（= `installer\`）からの相対なので、結果として `<repo>\dist\` に出る
+- `ArchitecturesAllowed=x64compatible` で x64 と ARM64 の両方を許可（Windows 11 ARM 上でも動く想定）
+- `PrivilegesRequiredOverridesAllowed=dialog` でユーザーが選択すれば管理者インストール（HKLM）も可能だが、既定は HKCU
+- Inno Setup は実機にインストールしないとビルドできない。やっさん環境で `winget install JRSoftware.InnoSetup` か手動 DL 必要 → README にリンク記載済み
+
 ### v0.3.1 — Phase 3b: システムトレイメニュー
 
 #### 設計判断

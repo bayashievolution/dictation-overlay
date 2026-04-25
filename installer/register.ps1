@@ -182,11 +182,22 @@ if ($IncludeEdge) {
   Register-Key 'HKEY_CURRENT_USER\Software\Microsoft\Edge\NativeMessagingHosts'
 }
 
+$buildKind =
+    if    ($ExePath -match '\\release\\') { 'release' }
+    elseif ($ExePath -match '\\debug\\')   { 'debug' }
+    else                                    { '不明' }
+
 Write-Host ''
 Write-Host "完了。" -ForegroundColor Green
-Write-Host "  overlay.exe : $ExePath" -ForegroundColor Green
-Write-Host "  拡張 ID 数  : $($origins.Count)" -ForegroundColor Green
-if ($Append) { Write-Host "  モード      : Append（既存を保持してマージ）" -ForegroundColor Green }
-else         { Write-Host "  モード      : Replace（既存を全置換）"             -ForegroundColor Green }
+Write-Host "  overlay.exe  : $ExePath" -ForegroundColor Green
+Write-Host "  ビルド種別   : $buildKind" -ForegroundColor Green
+Write-Host "  拡張 ID 数   : $($origins.Count)" -ForegroundColor Green
+if ($Append) { Write-Host "  モード       : Append（既存を保持してマージ）" -ForegroundColor Green }
+else         { Write-Host "  モード       : Replace（既存を全置換）"        -ForegroundColor Green }
 Write-Host ''
+if ($buildKind -eq 'debug') {
+  Write-Host '⚠️  debug ビルドを登録しました。開発時は `cargo build --release` を使うのが基本です（README 参照）。' -ForegroundColor Yellow
+  Write-Host '    意図的に debug にしているなら無視してください。'
+  Write-Host ''
+}
 Write-Host "次: 拡張を Chrome に読み込み、ポップアップ／UI から [接続] → [show_caption 送信] を試してください。"

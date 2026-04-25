@@ -236,6 +236,26 @@ v0.3.3 で `-webkit-app-region: drag` を CSS に付けたが、やっさんの�
 - WebKit/Chromium 系ブラウザでは `-webkit-app-region` は本来 Electron 専用 API、WebView2 は実装してない場合もある
 - v0.3.3 → v0.3.4 はソースコード読みでも気付けた事項。dictation-beta カルディ２の診断「drag region がない」は正しかったが、実装方法の選択を CSS に絞ってしまった点はわたしの責任
 
+#### 同日の事故：debug ビルドと manifest path のミスマッチで「version が更新されない」
+
+v0.3.4 を ship した直後、やっさんが「ready の version が 0.3.2 のまま」と報告。診断スクリプトを打ってもらったところ：
+
+| 項目 | 値 |
+|---|---|
+| manifest が指す .exe | `C:\dev\dictation-overlay-target\**release**\dictation-overlay.exe` |
+| やっさんがビルドしたもの | `C:\dev\dictation-overlay-target\**debug**\dictation-overlay.exe` |
+
+→ Chrome は manifest 通り **release** ビルドを起動するため、debug にいくら書いても無関係。release は v0.3.2 のまま放置されていた。
+
+**原因はわたし**：実機検証手順を書く時に `cargo build` と指示してしまい、`cargo build --release` を指示すべきだった。register.ps1 は **release を最優先で見る設計**にしてあるので、デフォルトで manifest は release を指す → 開発時も release を使うべき経路だった。
+
+**反省として恒久対応**：
+1. **README の「ビルド」セクションを書き換え**：開発時も `cargo build --release` を基本、debug を使うなら `-ExePath` で明示する旨を強調
+2. **register.ps1 の完了メッセージに「ビルド種別」を表示**：`release` か `debug` か一目で見える。ミスマッチをユーザーが視認しやすく
+3. **試行錯誤ログ（このファイル）に「debug/release 不一致」を独立した教訓として記録**
+
+このミスは作業中の「軽い指示」に起因していて、設計バグではない。だがやっさんは Rust にネイティブな知識があるわけではないので、わたしが「debug build」「release build」と区別なく指示したら混乱する。今後は **コマンド例を出す時は本番経路で動くものを示す**（debug 専用の何かでない限り）。
+
 ### v0.3.3 — ドラッグ移動の有効化（hotfix）
 
 dictation-beta カルディ２が、やっさんの実機検証中に発見：「クリックスルー OFF にしても字幕窓をマウスでつかんで動かせない」。`WindowEvent::Moved` リスナーは正しいが、そもそも OS が move を発火する条件（タイトルバー or drag region）が無かった。

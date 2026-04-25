@@ -34,18 +34,23 @@ Chrome拡張 [dictation-beta](../dictation-beta) と連携する **OSレベル�
 
 ### ビルド
 
-```bash
+**開発でも `cargo build --release` を基本にしてください**。`installer/register.ps1` のデフォルト探索順が release を最優先で見ているため、`cargo build`（debug）だけを更新しても **manifest が指す release 側が古いまま**になり、Chrome から起動されるバイナリが古いという事故が起きる。
+
+```powershell
+# Windows / PowerShell
 cd src-tauri
-cargo build           # debug → target/debug/dictation-overlay.exe
-cargo build --release # release → target/release/dictation-overlay.exe
+$env:CARGO_TARGET_DIR = "C:/dev/dictation-overlay-target"  # WSL 共有越しの I/O 回避
+cargo build --release   # → target/release/dictation-overlay.exe
 ```
 
-WSL 共有越しだと I/O が遅いため、環境変数で target ディレクトリをローカルに切ることを推奨：
+debug ビルドを使いたい時は明示的に `-ExePath` で manifest を debug に向け直す：
 
-```bash
-export CARGO_TARGET_DIR="C:/dev/dictation-overlay-target"
-cargo build
+```powershell
+cargo build  # debug
+.\installer\register.ps1 -ExtensionIds <ID> -ExePath C:\dev\dictation-overlay-target\debug\dictation-overlay.exe
 ```
+
+`register.ps1` の完了メッセージで「ビルド種別」（release / debug）が表示されるので、そこで自分の意図と一致しているか確認できる。
 
 ### Chrome Native Messaging への登録
 

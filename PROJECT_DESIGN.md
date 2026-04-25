@@ -218,3 +218,22 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 ### 実機検証状況（2026-04-25 時点）
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
+
+### v0.2.1 — register.ps1 複数ID対応
+dictation-beta カルディ２からの依頼で `installer/register.ps1` を改修。背景：
+- 開発期は test-extension（接続検証用）と dictation-beta（本物）の **両方を同時に繋ぎたい**
+- 旧版は単一 `-ExtensionId` のみ → manifest を上書きするため、片方を登録するともう片方が繋がらなくなる
+- 結果、やっさんが手動で manifest JSON を編集して両 ID を入れる運用になっていた
+
+**追加した点**：
+- `-ExtensionIds string[]` パラメータ（カンマ区切りで複数受け取り）
+- `-Append` スイッチ（既存 manifest の allowed_origins を読んで union → 重複除去 → 書き戻し）
+- 旧 `-ExtensionId`（単数）は後方互換でそのまま受け取る。`-ExtensionId` と `-ExtensionIds` は同時指定可能で、両方が連結される
+- 拡張 ID の正規化：先頭の `chrome-extension://` や末尾の `/` を勝手に削いで素の ID にする（コピペ事故防止）
+- 拡張 ID の loose validation：`^[a-p]{32}$` でない場合は `Write-Warning` で警告（強制終了はしない）
+- 完了メッセージで allowed_origins 一覧と Append/Replace モードを表示
+
+**設計判断**：
+- 重複除去は「既存→新規」の順で `HashSet.Add` に通すことで挿入順を保ちながらユニーク化
+- `@($origins)` で書き出して、要素が 1 つでも JSON 配列形式を強制（PowerShell の `ConvertTo-Json` は単一要素を文字列にしてしまう挙動への対処）
+- `-Append` 無指定時は明示的な「全置換」と扱う。Phase 4 の MSI 配布時は公式 ID で全置換するのが正解になるはずなので、Replace を素朴な既定値として残した

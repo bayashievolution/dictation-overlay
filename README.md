@@ -57,11 +57,22 @@ cargo build
 # 初回のみ：このセッションだけスクリプト実行を許可（-Force で確認プロンプト無し）
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
-# 登録
+# ① 1つの拡張だけ登録（最も基本）
 .\installer\register.ps1 -ExtensionId <拡張ID> -ExePath C:\dev\dictation-overlay-target\debug\dictation-overlay.exe
+
+# ② 2つ以上の拡張をまとめて登録（test-extension + dictation-beta を両方繋げたい時）
+.\installer\register.ps1 -ExtensionIds <ID1>,<ID2> -ExePath C:\dev\dictation-overlay-target\debug\dictation-overlay.exe
+
+# ③ 既存の登録に追加（既に走らせた後で別の拡張も繋げたくなった時）
+.\installer\register.ps1 -ExtensionIds <追加ID> -Append
 ```
 
 PowerShell 7 (`pwsh`) が入っていれば `pwsh .\installer\register.ps1 ...` でも可（`-Scope Process` の Bypass は PS7 でも必要）。
+
+**Tips**：
+- 複数拡張を `,` で並べる時、PowerShell では空白を入れると別パラメータと解釈されるので注意。`<ID1>,<ID2>` のように密着で
+- `-Append` は manifest の `allowed_origins` を読んでマージ → 重複は自動除去
+- `-Append` を付けないと既存の登録を全置換するので、運用時は `-Append` を強く推奨
 
 これで：
 - `%LOCALAPPDATA%\Dictation\overlay\com.bayashi.dictation_overlay.json` が配置される

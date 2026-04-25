@@ -9,7 +9,8 @@ Phase 1 で「Chrome から送った文字列が透明フローティング窓�
 3. `chrome://extensions` を開く → 「デベロッパーモード」ON → 「パッケージ化されていない拡張機能を読み込む」で `test-extension/` フォルダを選択。
 4. 読み込んだら、右上に表示された拡張 ID をコピー。
 5. `installer/com.bayashi.dictation_overlay.json` の `allowed_origins` にその拡張 ID（`chrome-extension://<ID>/`）が含まれていることを確認。
-   - register.ps1 が拡張 ID を引数で受け取って上書きするので、`.\installer\register.ps1 -ExtensionId <拡張ID>` と呼べばよい。
+   - register.ps1 が拡張 ID を引数で受け取って書き出すので `.\installer\register.ps1 -ExtensionId <拡張ID>` と呼べばよい。
+   - **dictation-beta も同時に繋ぎたい時**は `-ExtensionIds <test-ext ID>,<dictation-beta ID>` でまとめ登録するか、後から `-ExtensionIds <追加ID> -Append` で追加できる。
 6. ツールバーの拡張アイコンをクリック → ポップアップから「接続」→「show_caption 送信」。
 7. 画面下部中央に透明フローティング窓で字幕が出れば Phase 1 マイルストーン達成。
 

@@ -90,7 +90,8 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
     "borderRadius": 8,
     "paddingX": 24,
     "paddingY": 10,
-    "blockGapTenth": 0
+    "blockGapTenth": 0,
+    "writingMode": "horizontal"
   }
 }
 ```
@@ -101,6 +102,7 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 - **`borderRadius`** (v0.3.7〜)：字幕ボックスの角丸 (px、0〜32 推奨)。CSS 変数 `--cap-border-radius` 経由で反映。
 - **`paddingX`** / **`paddingY`** (v0.3.7〜)：字幕ボックスの内側余白 (px)。それぞれ左右と上下のパディング。CSS 変数 `--cap-padding-x` / `--cap-padding-y` 経由。
 - **`blockGapTenth`** (v0.3.7〜)：段落間 (`<p>` 要素間) の余白。`em` 単位の値を 10 倍した整数 (0〜25 推奨)。例: `13` → `1.3em` の `margin-bottom`。
+- **`writingMode`** (v0.3.16〜)：書字方向。`"horizontal"` / `"vertical-rl"` / `"vertical-lr"` の 3 値。CSS の `writing-mode` プロパティに直接マップ。`"horizontal"` は内部で `horizontal-tb` に変換。デフォルトは `"horizontal"`（後方互換）。**やっさんアイデア「英語映画に日本語縦書き字幕」の機能化**。`vertical-rl` は伝統的な右→左の日本語縦書き。配置（画面のどこに出すか）は `set_position` でユーザー側が制御する想定。
 - **推奨デバウンス**：拡張側で 50〜100ms。連続フレームを間引いてネイティブへの負荷を減らす。
 
 #### `hide_caption`

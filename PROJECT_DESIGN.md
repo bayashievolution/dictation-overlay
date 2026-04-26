@@ -219,6 +219,26 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.16 — 縦書きモード機能（やっさんアイデアの正規実装）
+
+v0.3.10 でフィードバックループによる「事故的縦書き化」を見たやっさんが「これはこれで機能としてはおもしろいかもしれない！英語の映画に日本語字幕を出すとかね」と発案。バグの副産物を捨てるのではなく、正規機能として復活させる。
+
+#### 実装
+- `src/main.js` `applySettings`：`s.writingMode` を `caption.style.writingMode` に直接マップ
+  - `"horizontal"` → `horizontal-tb`（CSS の正式値に変換）
+  - `"vertical-rl"` / `"vertical-lr"` はそのまま
+  - 未知値は無視（現在値維持、安全側）
+- `src-tauri/src/main.rs`：`CAPABILITIES` に `"writing-mode"` を追加
+- `NATIVE_MESSAGING_SPEC.md`：`settings.writingMode` フィールドの仕様を追記、capability 一覧と実装状況表を更新
+
+#### 設計判断
+- **配置（画面のどこに出すか）はオーバーレイ側では制御しない**：縦書きで画面右中央にしたいかどうかはユーザーの好み次第。dictation-beta が `set_position` を送るか、ユーザーがドラッグで動かす運用
+- **後方互換**：`writingMode` 未指定時は `horizontal-tb`（=現状の横書き）。dictation-beta が機能を使わない限り何も変わらない
+- **ResizeObserver は writing-mode 変化に追従**：縦書きだと `.caption` の幅・高さが入れ替わるが、`offsetWidth/Height` は CSS Box の自然な値を返す → ウィンドウもそれに追従して縦長に変形
+
+#### dictation-beta 側の連携
+beta が `settings.writingMode: "vertical-rl"` を送れば縦書きになる。設定モーダルにドロップダウン（横書き / 右→左縦書き / 左→右縦書き）を追加してもらう想定。実装タイミングはやっさん次第。
+
 ### v0.3.15 — CSS 変数経由を撤去、JS から直接 inline style 書き込み
 
 v0.3.14 で「0 ベタ送信を removeProperty で fallback」したが、やっさん検証で **「相変わらずパディングと角丸が適用されない、縦パディングだけ若干動くけど想定外」** 報告。CSS 変数 (`var(--cap-*, fallback)`) 経由のロジックが WebView2 で何らかの理由で確実に動いていない可能性。

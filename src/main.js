@@ -57,6 +57,18 @@
     if (s.lineHeightTenth) {
       caption.style.lineHeight = (Number(s.lineHeightTenth) / 10).toString();
     }
+    // v0.3.16: 縦書きモード。やっさんアイデア「英語映画に日本語縦書き字幕」を機能化。
+    // 値: "horizontal" (デフォルト、横書き) / "vertical-rl" (右→左、伝統的縦書き) /
+    //     "vertical-lr" (左→右)。CSS の writing-mode 値そのまま受け付け。
+    if (typeof s.writingMode === 'string') {
+      const wm = s.writingMode;
+      if (wm === 'horizontal' || wm === 'horizontal-tb') {
+        caption.style.writingMode = 'horizontal-tb';
+      } else if (wm === 'vertical-rl' || wm === 'vertical-lr') {
+        caption.style.writingMode = wm;
+      }
+      // 未知値は無視（現在値維持）
+    }
     // v0.3.6: transition kind
     if (typeof s.transition === 'string') {
       if (s.transition === 'none' || TRANSITION_CLASSES[s.transition]) {

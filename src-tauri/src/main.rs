@@ -43,9 +43,16 @@ const WINDOW_WIDTH_RATIO: f64 = 1.0; // モニタ幅 100%（暫定、即追従�
 const WINDOW_HEIGHT_RATIO: f64 = 0.25; // モニタ高さ 25%（暫定、即追従）
 
 /// v0.3.9: caption_resized で計算するウィンドウ余白（px）。
-/// 字幕の outer サイズ + 余白 がウィンドウサイズ。`#stage` の padding 16px と
-/// 同じく上下左右に取って、字幕がウィンドウ境界に密着しないようにする。
-const WINDOW_PADDING_PX: u32 = 16;
+/// 字幕の outer サイズ + 余白 がウィンドウサイズ。
+/// v0.3.21: 16px だと `.caption` の角丸や outline が WebView 境界に近すぎてクリップされ、
+/// ResizeObserver の微小揺れと相まって「上半分が消える」事故が起きた。
+/// 32px に倍増して余白を確保、揺れも吸収。
+const WINDOW_PADDING_PX: u32 = 32;
+
+/// v0.3.21: caption_resized 側のしきい値。target サイズが現在ウィンドウサイズと
+/// この値以下の差分なら set_size/set_position をスキップ。これで微小揺れによる
+/// 振動ループを止める。
+const RESIZE_THRESHOLD_PX: i32 = 5;
 
 /// How long to wait between position_changed emits (debounce).
 const POSITION_REPORT_INTERVAL_MS: u64 = 150;
@@ -88,6 +95,14 @@ fn caption_resized(window: WebviewWindow, width: u32, height: u32) {
             return;
         }
     };
+
+    // v0.3.21: 微小差分は no-op。これで ResizeObserver と set_size の
+    // フィードバックループ（フォントの hinting や DPI 計算で 1〜数 px 揺れる）を止める。
+    let dw = (win_w as i32 - old_size.width as i32).abs();
+    let dh = (win_h as i32 - old_size.height as i32).abs();
+    if dw <= RESIZE_THRESHOLD_PX && dh <= RESIZE_THRESHOLD_PX {
+        return;
+    }
 
     // 下端を保つように y を再計算
     let new_y = old_pos.y + old_size.height as i32 - win_h as i32;

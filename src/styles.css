@@ -23,15 +23,9 @@ html, body {
 
 .caption {
   /* v0.3.15: CSS 変数経由を撤去し、ハードコード値に戻す。
-     applySettings() が JS で直接 inline style に書き換える方式（main.js）。
-     CSS 変数経由は WebView2 で何らかの理由で効かない事故があり、
-     確実性重視で inline style 直書きに切り替え。
-     v0.3.20 デバッグ用：!important + 赤 outline + 巨大 border-radius で
-     強制描画テスト。これで描画されないなら描画レイヤーで何かが起きている。 */
+     applySettings() が JS で直接 inline style に書き換える方式（main.js）。 */
   padding: 10px 24px;
-  border-radius: 50px !important;
-  outline: 5px solid red !important;
-  box-shadow: none !important;
+  border-radius: 8px;
   font-size: 64px;
   font-weight: 600;
   line-height: 1.3;

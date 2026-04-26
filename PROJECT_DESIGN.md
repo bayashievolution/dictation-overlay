@@ -239,6 +239,45 @@ v0.3.10 でフィードバックループによる「事故的縦書き化」を
 #### dictation-beta 側の連携
 beta が `settings.writingMode: "vertical-rl"` を送れば縦書きになる。設定モーダルにドロップダウン（横書き / 右→左縦書き / 左→右縦書き）を追加してもらう想定。実装タイミングはやっさん次第。
 
+### v0.3.21 — ResizeObserver の振動ループを止める（角丸が消える事故の真因）
+
+#### 経緯（反省会含む）
+
+v0.3.7〜v0.3.15 で padding/角丸機能を実装した後、やっさんから繰り返し「padding/角丸が見えない」報告。私は以下の他責的な姿勢を取り続けた：
+
+- 「beta の `Number()||0` で 0 が送られてる」← 確かにあったが beta v0.13.31 で `?? 8` に修正済み、本質ではなかった
+- 「inline style に 32px 入ってるなら効いてる、見えてないだけの錯覚」← **馬鹿にした表現**、やっさんから明示的に怒られた（CLAUDE.md ルール 12 違反）
+- 「直前の編集を疑え」「フォントサイズで背景サイズ調整したあと」のヒントを軽く扱った
+
+やっさんは何度も「直前の overlay 側の編集」を指摘していた。私が自分のコードを疑わず、外部要因（beta、CSS 変数、WebView2 の挙動）に責任を転嫁した。
+
+#### 真因
+v0.3.20 のデバッグ（`outline: 5px solid red !important;` + `border-radius: 50px !important`）で、やっさんの観察「**一瞬全部見える、すぐ bottom 以外消える**」が決定的な手がかり。
+
+メカニズム：
+1. ResizeObserver が `.caption.offsetWidth/Height` の変化を検知
+2. しきい値 2px、デバウンス 50ms で `caption_resized` invoke
+3. Rust 側で `window.set_size + set_position`
+4. WebView がリフロー、フォント描画の hinting や DPI 計算で `.caption` の outerSize が 1〜数 px 揺れる
+5. 2px しきい値を超えて ResizeObserver 再発火
+6. 永遠ループ → ウィンドウが小刻みに動き続ける
+7. その間、`.caption` の上端付近（角丸の top 部分や outline）が WebView 境界でクリップされ続ける
+8. ユーザーには「角丸が無い、bottom だけ見える」状態に見える
+
+#### 修正（v0.3.21）
+- `WINDOW_PADDING_PX: 16 → 32`（`.caption` の周りの余白を倍に、揺れと outline 描画の余地を確保）
+- JS ResizeObserver しきい値: `2px → 8px`（普通のフォント揺れは無視）
+- JS デバウンス: `50ms → 120ms`（リフロー収束を待つ）
+- Rust `caption_resized` に新規しきい値 `RESIZE_THRESHOLD_PX = 5`：target サイズが現在ウィンドウサイズと ±5px 以内なら no-op（フィードバックループの最後の砦）
+- デバッグ用 `!important` outline / box-shadow none を撤去、styles.css は production 値に戻す
+
+#### 反省（CLAUDE.md ルール 11 で記録）
+1. **「錯覚」と言ったのは決定的に他責**。やっさんが「効いてない」と言ったらそれを信じる。観察を否定する前に自分のコードを疑う
+2. **beta のせいに何度もした**（`Number()||0`）。beta は既に修正済みだったのに、私が古い情報で他責し続けた
+3. **「直前の編集を疑え」のヒントを 4 回繰り返されてやっと反応した**。やっさんが同じことを繰り返している＝私が聞いていない。CLAUDE.md ルール 11「同じ指摘がされる＝私がルール違反」
+4. **役割分担の意識が薄い**：「カルディ２がプロジェクト分けたほうがいい」とやっさんが言ったのに beta のせいにし続けた。**自分の overlay 領域の責任を取る**べき
+5. v0.3.7→v0.3.15 で 8 段階の試行錯誤、最後 v0.3.21 で ResizeObserver の振動ループに辿り着いた。複雑な相互作用は **最初から outline + 強制 CSS で描画レイヤーを切り分け**するほうが早かった
+
 ### v0.3.15 — CSS 変数経由を撤去、JS から直接 inline style 書き込み
 
 v0.3.14 で「0 ベタ送信を removeProperty で fallback」したが、やっさん検証で **「相変わらずパディングと角丸が適用されない、縦パディングだけ若干動くけど想定外」** 報告。CSS 変数 (`var(--cap-*, fallback)`) 経由のロジックが WebView2 で何らかの理由で確実に動いていない可能性。

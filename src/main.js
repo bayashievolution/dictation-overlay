@@ -158,18 +158,20 @@
       const w = caption.offsetWidth;
       const h = caption.offsetHeight;
       if (w === 0 || h === 0) return;
-      // 微小変化はスキップ（フォントの hinting で 1px 揺れる程度を吸収）
-      if (Math.abs(w - lastW) < 2 && Math.abs(h - lastH) < 2) return;
+      // v0.3.21: しきい値を 2 → 8px、デバウンス 50 → 120ms に拡大。
+      // フォントの hinting や set_size 後のリフローで数 px 揺れる現象が
+      // ResizeObserver と Rust 側の set_size をフィードバックループさせて、
+      // ウィンドウが永続的に小刻みに動き、`.caption` の上半分がクリップされる
+      // 事故が起きた（v0.3.20 の outline テストで判明）。
+      if (Math.abs(w - lastW) < 8 && Math.abs(h - lastH) < 8) return;
       lastW = w;
       lastH = h;
-      // v0.3.19 debug
       console.log('[overlay debug] ResizeObserver fired:', w, 'x', h);
-      // 50ms デバウンス（連続的に伸び縮みする時に最終値だけ送る）
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
         invoke('caption_resized', { width: w, height: h }).catch(() => {});
-      }, 50);
+      }, 120);
     });
     ro.observe(caption);
   }

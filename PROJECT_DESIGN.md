@@ -239,6 +239,36 @@ v0.3.10 でフィードバックループによる「事故的縦書き化」を
 #### dictation-beta 側の連携
 beta が `settings.writingMode: "vertical-rl"` を送れば縦書きになる。設定モーダルにドロップダウン（横書き / 右→左縦書き / 左→右縦書き）を追加してもらう想定。実装タイミングはやっさん次第。
 
+### v0.3.24 — YouTube 風ストリーミングモード（行単位スクロールアニメ）
+
+#### 経緯
+v0.3.23 で UI 安定後、やっさんが「ストリーミングモードも復活して、YouTube みたいに一文字ずつ出てしばらくしたら上に押し出す形で入れ替わるモードもつけたい」と発言。インスパイア元のスクショ（YouTube 自動字幕）も共有された。
+
+#### beta 側の現状
+beta v0.13.31 captions.js を直接 Read で確認：
+- `displayMode: "stream"` モードあり
+- `_streamDisplayed` 配列で「画面表示中の行」を管理
+- `streamLineCount=4`（4 行）、`streamLineIntervalMs=300`（300ms 間隔で 1 行追加）
+- 古い行が押し出され、新規行が下から追加
+- `data-slice-ts` は HTML 内属性として持たれているが、**overlay には plain text として届く**（`htmlToCaptionText` で変換）
+- → overlay 側からは **slice 単位の判別は不可、行単位の text diff で十分**
+
+#### 実装（v0.3.24）
+- 新 settings フィールド `streamMode: boolean`
+- `streamMode: true` 時：
+  - `setTextStream(newText)` で前回 `lastLines` と末尾共通部分を比較
+  - **消えた行**：DOM 内の上から N 個に `.stream-exit` クラス、220ms 後に DOM から削除
+  - **新規行**：末尾に `<p>` を追加、`.stream-enter` クラス、アニメ後にクラス剥がし
+- `streamMode: false` 時：既存の `applyParagraphs` 一括表示
+- CSS：`@keyframes cap-stream-enter` (下から fade-in + slide-up)、`cap-stream-exit` (上に slide-up + fade-out)、duration 220ms
+
+#### 仕様書更新
+- `NATIVE_MESSAGING_SPEC.md` を **v0.3.24** に。`streamMode` フィールドの仕様を追記、capability `stream-mode` を追加
+- 既存の `transition` フィールドとの関係：`streamMode: true` 時は行単位アニメが優先（transition は無視）
+
+#### タイプライター効果は次の polish
+やっさんが言及した「文字単位で 1 文字ずつ追加」のタイプライター効果は v0.3.24 では未実装。beta から行単位で text 全体が送られてくるため、文字単位の表示は overlay 側で「char-by-char で表示」のロジックを追加する必要がある。これは別タスクで（v0.3.25+）。
+
 ### v0.3.23 — 動的ウィンドウサイズ追従を撤去、Web の常識的な div レイアウトに戻す
 
 #### 経緯

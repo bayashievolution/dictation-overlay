@@ -102,3 +102,22 @@ html, body {
   from { opacity: 1; }
   to   { opacity: 0; }
 }
+
+/* v0.3.24: streamMode（YouTube 風行スクロール）の行単位アニメ。
+   - .stream-enter: 新規行が下から fade-in + slide-up
+   - .stream-exit:  古い行が上に slide-up + fade-out
+   beta v0.13.31 の stream モードと組み合わせて、行が押し出されるアニメに。 */
+.caption p.stream-enter {
+  animation: cap-stream-enter 220ms ease both;
+}
+.caption p.stream-exit {
+  animation: cap-stream-exit 220ms ease both;
+}
+@keyframes cap-stream-enter {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes cap-stream-exit {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-24px); }
+}

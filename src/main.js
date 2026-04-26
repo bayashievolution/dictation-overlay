@@ -16,6 +16,9 @@
   };
   let currentTransition = 'none'; // backward compat: default OFF
   let lastText = '';
+  // v0.3.24: streamMode 用、前回表示中の行配列（diff の基準）
+  let lastLines = [];
+  let streamMode = false;
 
   // Tauri 2.0 invoke API (window.__TAURI__.core.invoke)
   function getInvoke() {
@@ -56,6 +59,11 @@
     }
     if (s.lineHeightTenth) {
       caption.style.lineHeight = (Number(s.lineHeightTenth) / 10).toString();
+    }
+    // v0.3.24: streamMode（YouTube 風行スクロール）。
+    // true で setText が「行 diff → 新規行は下からスライドイン、消えた行は上にスライドアウト」モードに。
+    if (typeof s.streamMode === 'boolean') {
+      streamMode = s.streamMode;
     }
     // v0.3.16: 縦書きモード。やっさんアイデア「英語映画に日本語縦書き字幕」を機能化。
     // 値: "horizontal" (デフォルト、横書き) / "vertical-rl" (右→左、伝統的縦書き) /
@@ -130,6 +138,11 @@
     if (typeof text !== 'string') return;
     const changed = text !== lastText;
     lastText = text;
+    if (!changed && !streamMode) return;
+    if (streamMode) {
+      setTextStream(text);
+      return;
+    }
     applyParagraphs(text);
     if (!changed) return;
     if (currentTransition === 'none') return;
@@ -139,6 +152,56 @@
     Object.values(TRANSITION_CLASSES).forEach((c) => caption.classList.remove(c));
     void caption.offsetWidth;
     caption.classList.add(cls);
+  }
+
+  // v0.3.24: streamMode 用 setText。
+  // text を行配列に分割し、前回 (lastLines) と末尾共通部分を比較して
+  // 「上から removedCount 行が消えた、末尾に addedLines が追加された」と判定。
+  // 消えた行は exit アニメ、新規行は enter アニメ。共通部分は触らない。
+  // beta v0.13.31 の stream モードは「古い行が上に押し出され、新規行が下に追加」
+  // パターンなので、このシンプルな diff で意図通り動く。
+  const STREAM_ANIM_DURATION = 220; // CSS と合わせる
+  function setTextStream(newText) {
+    const newLines = String(newText).split('\n').filter((l) => l.length > 0);
+    const oldLines = lastLines;
+
+    // 末尾共通部分の長さ
+    let commonSuffix = 0;
+    const maxN = Math.min(newLines.length, oldLines.length);
+    while (
+      commonSuffix < maxN &&
+      newLines[newLines.length - 1 - commonSuffix] ===
+        oldLines[oldLines.length - 1 - commonSuffix]
+    ) {
+      commonSuffix++;
+    }
+
+    const removedCount = oldLines.length - commonSuffix;
+    const addedLines = newLines.slice(0, newLines.length - commonSuffix);
+
+    // 既存 <p> 群（リアル DOM）
+    const existingPs = Array.from(caption.querySelectorAll('p'));
+
+    // 上から removedCount 個に exit クラス、duration 後に DOM から削除
+    for (let i = 0; i < removedCount && i < existingPs.length; i++) {
+      const p = existingPs[i];
+      p.classList.add('stream-exit');
+      setTimeout(() => {
+        if (p.parentNode === caption) p.parentNode.removeChild(p);
+      }, STREAM_ANIM_DURATION + 40);
+    }
+
+    // 末尾に addedLines を追加（enter クラス）
+    for (const line of addedLines) {
+      const p = document.createElement('p');
+      p.appendChild(document.createTextNode(line));
+      p.classList.add('stream-enter');
+      caption.appendChild(p);
+      // クラスを少し遅らせて剥がす（アニメーションが完了してから）
+      setTimeout(() => p.classList.remove('stream-enter'), STREAM_ANIM_DURATION + 40);
+    }
+
+    lastLines = newLines;
   }
 
   // v0.3.23: ResizeObserver + caption_resized 動的ウィンドウサイズ追従は撤去。

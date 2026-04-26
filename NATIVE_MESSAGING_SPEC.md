@@ -91,7 +91,8 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
     "paddingX": 24,
     "paddingY": 10,
     "blockGapTenth": 0,
-    "writingMode": "horizontal"
+    "writingMode": "horizontal",
+    "streamMode": false
   }
 }
 ```
@@ -103,6 +104,7 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 - **`paddingX`** / **`paddingY`** (v0.3.7〜)：字幕ボックスの内側余白 (px)。それぞれ左右と上下のパディング。CSS 変数 `--cap-padding-x` / `--cap-padding-y` 経由。
 - **`blockGapTenth`** (v0.3.7〜)：段落間 (`<p>` 要素間) の余白。`em` 単位の値を 10 倍した整数 (0〜25 推奨)。例: `13` → `1.3em` の `margin-bottom`。
 - **`writingMode`** (v0.3.16〜)：書字方向。`"horizontal"` / `"vertical-rl"` / `"vertical-lr"` の 3 値。CSS の `writing-mode` プロパティに直接マップ。`"horizontal"` は内部で `horizontal-tb` に変換。デフォルトは `"horizontal"`（後方互換）。**やっさんアイデア「英語映画に日本語縦書き字幕」の機能化**。`vertical-rl` は伝統的な右→左の日本語縦書き。配置（画面のどこに出すか）は `set_position` でユーザー側が制御する想定。
+- **`streamMode`** (v0.3.24〜)：`true` で **YouTube 風の行スクロール表示**。`text` の行配列を前回送信時と diff し、消えた行は上にスライドアウト、新規行は下からスライドイン（duration 220ms）。**beta の `displayMode: "stream"` と組み合わせて使う**前提（beta が `_streamDisplayed` 配列で行を管理し、行単位の `\n` 区切り text を連続送信する）。デフォルトは `false`（既存の段落一括表示）。`transition` フィールドは `streamMode: false` 時にだけ効く（`streamMode: true` 時は行単位アニメが優先）。
 - **推奨デバウンス**：拡張側で 50〜100ms。連続フレームを間引いてネイティブへの負荷を減らす。
 
 #### `hide_caption`

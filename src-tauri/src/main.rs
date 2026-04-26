@@ -24,6 +24,7 @@ const CAPABILITIES: &[&str] = &[
     "tray-menu",
     "transition",
     "writing-mode",
+    "stream-mode",
 ];
 
 /// Bottom margin (px) when auto-positioning on a monitor.

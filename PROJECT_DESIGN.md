@@ -219,6 +219,27 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.13 — flex-shrink: 0 追加（v0.3.12 でも残っていたオーバーフロー解消）
+
+v0.3.12 で max-width を撤去したのに、やっさん検証で**まだ padding/角丸が見えない**。
+
+#### 原因（v0.3.12 で見落とした）
+- `.caption` は `#stage`（display: flex container）の **flex item**
+- flex item のデフォルトは `flex-shrink: 1` → container 幅以下に縮められる
+- ウィンドウ幅 X、`#stage` の内側 X-32、コンテンツ幅 Y > X-32 の場合
+- `.caption` は flex-shrink で `min(Y, X-32)` まで縮む（= X-32）
+- white-space: pre のテキストがその縮んだ幅を超えて両側にオーバーフロー
+- 結果は v0.3.11 と同じ症状（max-width 撤去だけでは flex 制約に阻まれる）
+
+#### 修正
+`.caption` に `flex-shrink: 0` を追加。flex container 幅に縮められず、コンテンツ幅で維持。
+
+#### 学び
+- `inline-block` の自然な挙動は「コンテンツ幅で広がる」だが、`flex` container 内に置くと flex の規則が支配する
+- `flex-shrink: 0` を付けないと、コンテンツ幅 > container 幅で勝手に縮む
+- v0.3.7 から `display: inline-block` を入れたが flex container 内なら flex item としての挙動が優先される、という認識が抜けていた
+- max-width / white-space / display / flex の組み合わせは要注意。次は素直に `#stage` を flex でなく block にして absolute 配置でも良かったかも
+
 ### v0.3.12 — max-width 撤去で「padding/角丸が見えない」修正
 
 v0.3.11 で縦書き化は直ったが、やっさんスクショで「字幕の左右の padding が消えて、角丸も見えず、テキストが画面端まで広がってる」現象。

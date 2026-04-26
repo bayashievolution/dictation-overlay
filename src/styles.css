@@ -34,13 +34,16 @@ html, body {
   /* 背景自動サイズ：内容に応じて伸び縮みする inline-block 風挙動。
      v0.3.8: word-break/overflow-wrap を外して自動折り返しを止める。
      v0.3.11: white-space: pre-wrap → pre（CJK の文字境界折り返し防止）。
-     v0.3.12: max-width を撤去。max-width があると long-line で `.caption` が
-     その幅で止まり、テキストが両側にオーバーフロー → 背景・padding・角丸が
-     見えなくなる事故が起きた（やっさんスクショ）。撤去で `.caption` の幅 =
-     テキスト + padding になり、ウィンドウもこれに ResizeObserver で追従。
-     画面幅を超える長文は OS のウィンドウ境界で見切れるが、それは「\n を
-     入れて折り返してね」というやっさん明示の仕様の範囲。 */
+     v0.3.12: max-width を撤去（long-line でオーバーフローして padding/角丸が
+     見えなくなる事故対策）。
+     v0.3.13: flex-shrink: 0 を追加。`.caption` は #stage (flex container) の
+     flex item で、デフォルトの flex-shrink: 1 だと container 幅以下に縮められる。
+     コンテンツ幅 > container 幅 で縮められると white-space: pre のテキストが
+     両側にオーバーフロー（v0.3.12 でも残っていた症状）。flex-shrink: 0 で
+     コンテンツ幅維持。ウィンドウは ResizeObserver でこの幅に追従。
+     画面幅を超える長文は OS で見切れる（やっさん明示の仕様）。 */
   display: inline-block;
+  flex-shrink: 0;
   white-space: pre;
   color: #ffffff;
   background: rgba(0, 0, 0, 0.7);

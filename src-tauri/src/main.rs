@@ -5,7 +5,7 @@ mod native_messaging;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
@@ -49,10 +49,10 @@ const WINDOW_HEIGHT_RATIO: f64 = 0.25; // モニタ高さ 25%（暫定、即追�
 /// 32px に倍増して余白を確保、揺れも吸収。
 const WINDOW_PADDING_PX: u32 = 32;
 
-/// v0.3.21: caption_resized 側のしきい値。target サイズが現在ウィンドウサイズと
-/// この値以下の差分なら set_size/set_position をスキップ。これで微小揺れによる
-/// 振動ループを止める。
-const RESIZE_THRESHOLD_PX: i32 = 5;
+/// v0.3.22: caption_resized は set_size 直後この時間内の再 invoke を無視する
+/// （クールダウン方式）。これで振動ループを止めつつ、ユーザーがスライダーを
+/// 連続的に動かす時もちゃんと追従する（クールダウン後の最終値で set_size）。
+const RESIZE_COOLDOWN_MS: u64 = 100;
 
 /// How long to wait between position_changed emits (debounce).
 const POSITION_REPORT_INTERVAL_MS: u64 = 150;
@@ -63,6 +63,10 @@ static STDOUT_LOCK: Mutex<()> = Mutex::new(());
 /// Set when the window emits a Moved or Resized event.
 /// The reporter thread clears it after sending one `position_changed`.
 static GEOMETRY_DIRTY: AtomicBool = AtomicBool::new(false);
+
+/// v0.3.22: 最後に caption_resized で set_size を呼んだ時刻。
+/// クールダウン期間中の再 invoke はスキップ → 振動ループ防止。
+static LAST_RESIZE_TIME: Mutex<Option<Instant>> = Mutex::new(None);
 
 /// Holds clones of the tray menu's check items so we can sync their visual
 /// state when the underlying state changes via Native Messaging.
@@ -85,6 +89,20 @@ fn send(msg: &OutMessage) {
 /// 既存の outer_position を起点に高さ差分を上に足す。
 #[tauri::command]
 fn caption_resized(window: WebviewWindow, width: u32, height: u32) {
+    // v0.3.22: クールダウン中はスキップ。set_size 直後の WebView リフローで
+    // `.caption` のサイズが微変化して再 invoke される振動ループ対策。
+    // 「微小しきい値で無視」から「時間ベースで無視」に変えた理由：
+    // しきい値方式は「ユーザーがスライダーを連続的に小さく動かす」ケースで
+    // 全部 no-op になって追従しない事故が起きた（v0.3.21 検証で発覚）。
+    {
+        let last = LAST_RESIZE_TIME.lock().unwrap();
+        if let Some(t) = *last {
+            if t.elapsed() < Duration::from_millis(RESIZE_COOLDOWN_MS) {
+                return;
+            }
+        }
+    }
+
     let win_w = (width + WINDOW_PADDING_PX * 2).max(120);
     let win_h = (height + WINDOW_PADDING_PX * 2).max(60);
 
@@ -92,15 +110,13 @@ fn caption_resized(window: WebviewWindow, width: u32, height: u32) {
         (Ok(p), Ok(s)) => (p, s),
         _ => {
             let _ = window.set_size(PhysicalSize::new(win_w, win_h));
+            *LAST_RESIZE_TIME.lock().unwrap() = Some(Instant::now());
             return;
         }
     };
 
-    // v0.3.21: 微小差分は no-op。これで ResizeObserver と set_size の
-    // フィードバックループ（フォントの hinting や DPI 計算で 1〜数 px 揺れる）を止める。
-    let dw = (win_w as i32 - old_size.width as i32).abs();
-    let dh = (win_h as i32 - old_size.height as i32).abs();
-    if dw <= RESIZE_THRESHOLD_PX && dh <= RESIZE_THRESHOLD_PX {
+    // 完全同一サイズなら no-op（最低限のループ防止）
+    if win_w == old_size.width && win_h == old_size.height {
         return;
     }
 
@@ -111,6 +127,7 @@ fn caption_resized(window: WebviewWindow, width: u32, height: u32) {
 
     let _ = window.set_size(PhysicalSize::new(win_w, win_h));
     let _ = window.set_position(PhysicalPosition::new(new_x, new_y));
+    *LAST_RESIZE_TIME.lock().unwrap() = Some(Instant::now());
 }
 
 /// v0.3.9: WebView から呼ばれる。fade-out アニメーション完了後に呼ばれて

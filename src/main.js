@@ -17,6 +17,15 @@
   let currentTransition = 'none'; // backward compat: default OFF
   let lastText = '';
 
+  // Tauri 2.0 invoke API (window.__TAURI__.core.invoke)
+  function getInvoke() {
+    const api = window.__TAURI__;
+    if (!api) return null;
+    if (api.core && typeof api.core.invoke === 'function') return api.core.invoke;
+    if (typeof api.invoke === 'function') return api.invoke;
+    return null;
+  }
+
   function hexToRgba(hex, alpha) {
     const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex || ''));
     if (!m) return `rgba(0,0,0,${alpha})`;
@@ -54,18 +63,16 @@
         currentTransition = s.transition;
       }
     }
-    // v0.3.7: borderRadius (px, 0〜32)、CSS 変数経由で .caption に反映
+    // v0.3.7: borderRadius (px, 0〜32)
     if (s.borderRadius !== undefined) {
       caption.style.setProperty('--cap-border-radius', Number(s.borderRadius) + 'px');
     }
-    // v0.3.7: paddingX / paddingY（px）
     if (s.paddingX !== undefined) {
       caption.style.setProperty('--cap-padding-x', Number(s.paddingX) + 'px');
     }
     if (s.paddingY !== undefined) {
       caption.style.setProperty('--cap-padding-y', Number(s.paddingY) + 'px');
     }
-    // v0.3.7: blockGapTenth（em x 10、0〜25）→ em 単位の段落間 margin
     if (s.blockGapTenth !== undefined) {
       caption.style.setProperty('--cap-block-gap', (Number(s.blockGapTenth) / 10) + 'em');
     }
@@ -75,12 +82,10 @@
   // dictation-beta は \n{2,} を段落区切り、\n は段落内の改行（line break）として送ってくる
   // （captions.js の renderTextIntoBox 同等のルール）。
   function applyParagraphs(text) {
-    // 全 child を退避してから新規挿入（DOM 直接操作で innerHTML 経由を避ける = XSS 対策）
     while (caption.firstChild) caption.removeChild(caption.firstChild);
     const blocks = String(text).split(/\n{2,}/);
     for (const block of blocks) {
       const p = document.createElement('p');
-      // 段落内の \n は <br> に
       const lines = block.split('\n');
       lines.forEach((line, i) => {
         if (i > 0) p.appendChild(document.createElement('br'));
@@ -92,7 +97,6 @@
 
   function setText(text) {
     if (typeof text !== 'string') return;
-    // 同じテキストの再送（スタイルだけ変えたい時など）はアニメーション不要
     const changed = text !== lastText;
     lastText = text;
     applyParagraphs(text);
@@ -101,30 +105,80 @@
 
     const cls = TRANSITION_CLASSES[currentTransition];
     if (!cls) return;
-    // 全アニメーションクラスを一旦剥がす
     Object.values(TRANSITION_CLASSES).forEach((c) => caption.classList.remove(c));
-    // reflow を強制してアニメーションを再トリガ
     void caption.offsetWidth;
     caption.classList.add(cls);
+  }
+
+  // ---- v0.3.9: Window size auto-tracking --------------------------------
+  // .caption のサイズが変わったら（フォントサイズ・段落数・ブロック間隔の変化）、
+  // ウィンドウもそれに追従させて「字幕の物理サイズ + 余白」になるようにする。
+  // これで:
+  //   ① フォント大でもウィンドウ境界でクリップされない
+  //   ② クリックスルー OFF 時に「字幕より上の透明な空白領域」が無くなり、
+  //      マウスイベントが下のアプリに通る
+  function setupResizeObserver() {
+    const invoke = getInvoke();
+    if (!invoke || typeof ResizeObserver === 'undefined') return;
+    let lastW = -1;
+    let lastH = -1;
+    let timer = null;
+    const ro = new ResizeObserver(() => {
+      const w = caption.offsetWidth;
+      const h = caption.offsetHeight;
+      if (w === 0 || h === 0) return;
+      // 微小変化はスキップ（フォントの hinting で 1px 揺れる程度を吸収）
+      if (Math.abs(w - lastW) < 2 && Math.abs(h - lastH) < 2) return;
+      lastW = w;
+      lastH = h;
+      // 50ms デバウンス（連続的に伸び縮みする時に最終値だけ送る）
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        invoke('caption_resized', { width: w, height: h }).catch(() => {});
+      }, 50);
+    });
+    ro.observe(caption);
+  }
+
+  // ---- v0.3.9: Fade-out on hide_caption ---------------------------------
+  // hide_caption 受信で window.hide() する前に CSS フェードアウトを挟む。
+  // 「字幕表示 ON」が 5 秒で beta から hide_caption が来るのにも合う。
+  function fadeOutAndHide() {
+    const invoke = getInvoke();
+    if (!invoke) return;
+    caption.classList.add('fading-out');
+    setTimeout(() => {
+      invoke('window_hide').catch(() => {});
+      // hide した後、次に show されるときに opacity 0 のままにならないよう
+      // クラスを剥がす
+      caption.classList.remove('fading-out');
+    }, 220);
   }
 
   function bind() {
     const api = window.__TAURI__;
     if (!api || !api.event || typeof api.event.listen !== 'function') {
-      // Tauri runtime not ready yet — retry once.
       setTimeout(bind, 50);
       return;
     }
     api.event.listen('show-caption', (evt) => {
       const p = evt && evt.payload;
       if (!p) return;
-      // settings → text の順で適用（transition フィールドを反映してから text 差分判定したい）
+      // show 直後に fade-out 残留があったら即剥がす（show が来たら即不透明に戻す）
+      caption.classList.remove('fading-out');
       applySettings(p.settings);
       setText(p.text);
     });
     api.event.listen('update-style', (evt) => {
       applySettings(evt && evt.payload);
     });
+    // v0.3.9: hide-caption は Rust から「フェードアウトして消す」イベントとして受信
+    api.event.listen('fade-out-and-hide', () => {
+      fadeOutAndHide();
+    });
+
+    setupResizeObserver();
   }
 
   bind();

@@ -91,3 +91,13 @@ html, body {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* v0.3.9: hide_caption 受信時のふんわり消去（duration 220ms）。
+   beta の「字幕表示 ON」5 秒トーストの締めくくり、ふだんの hide_caption 全般で使う。 */
+.caption.fading-out {
+  animation: cap-fade-out 220ms ease both;
+}
+@keyframes cap-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}

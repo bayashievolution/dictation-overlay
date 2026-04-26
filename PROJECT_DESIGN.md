@@ -219,6 +219,42 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.9 — ウィンドウサイズ動的追従 + fade-out + 初期テキスト変更
+
+やっさんから 2 件報告：
+1. v0.3.8 でウィンドウを画面下半分に拡大した結果、**クリックスルー OFF にすると字幕より上の領域でマウス操作（カーソル移動以外）ができない**。空白部分も overlay が受けてしまう
+2. 起動時の「dictation-overlay ready」を「字幕表示 ON」に変えて、5 秒でふんわり消えるようにしたい
+
+#### 設計
+v0.3.7→v0.3.8 のウィンドウサイズ問題は「固定 vs モニタ比率」の二択で揺れていたが、**字幕の物理サイズに動的追従させる**のが本来の正解だった。これで両方解決：
+- フォント大でもウィンドウが追従するからクリップされない（v0.3.7 の問題）
+- ウィンドウが字幕とほぼ同じサイズなので「字幕より上の透明な空白領域」が消える（v0.3.8 の副作用）
+
+#### 実装
+
+1. **`src/main.js`**：
+   - `ResizeObserver` で `.caption` の `offsetWidth/Height` を監視。50ms デバウンス、2px 未満の揺れは無視
+   - 変化があれば `invoke('caption_resized', { width, height })` を Rust に送る
+   - `fade-out-and-hide` イベントを listen → `.caption` に `fading-out` クラス付与 → 220ms 後に `invoke('window_hide')` 呼出
+   - `show-caption` 受信時に `fading-out` クラスを即座に剥がす（fade 中に show されたら不透明に戻す）
+2. **`src-tauri/src/main.rs`**：
+   - `#[tauri::command] caption_resized(width, height)`：ウィンドウサイズを `字幕サイズ + WINDOW_PADDING_PX*2` に set_size、下端を保つよう `outer_position.y + old_height - new_height` で y 再計算、x は中央維持
+   - `#[tauri::command] window_hide()`：単純に `window.hide()`
+   - `InMessage::HideCaption` を「直接 hide」から「`fade-out-and-hide` イベントを emit」に変更。JS が CSS アニメ後に `window_hide` を呼び出す流れに
+   - `WINDOW_WIDTH_RATIO` を 1.0→0.6、`WINDOW_HEIGHT_RATIO` を 0.5→0.15 に縮小（起動瞬間の暫定サイズ、ResizeObserver で即追従）
+   - `WINDOW_PADDING_PX = 16` 新設（`#stage` padding と同じ）
+3. **`src/styles.css`**：`.caption.fading-out { animation: cap-fade-out 220ms ease both; }` と `@keyframes cap-fade-out` 追加
+4. **`src/index.html`**：初期テキスト `dictation-overlay ready` → `字幕表示 ON`（A 件）
+
+#### 設計判断
+- **下端を保つように y 再計算**：字幕は `#stage` で `align-items: flex-end` の下端寄せ。ウィンドウが縦に伸びる時は「下端が動かず、上に伸びる」のがやっさんの要望（字幕の見える位置がブレない）
+- **ResizeObserver の 50ms デバウンス + 2px しきい値**：フォント描画 hinting で ±1px 揺れることがある。連続的に伸び縮みする時は最終値だけ採用してウィンドウ操作回数を減らす
+- **fade-out 220ms**：v0.3.6 の transition が 180ms なので、それより気持ち長く。ふんわり感重視
+- **HideCaption を Rust 側で直接 hide しない**：fade-out イベントを emit して JS に任せる。Rust 側で sleep するとイベントループブロックするので避けた
+
+#### beta 側への依頼
+beta v0.13.x の `case 'ready':` 直後の「字幕表示 ON」3 秒トースト → **5 秒タイマー + `hide_caption` 化**を依頼（Notion）。`show_caption {text: ''}` で消すのではなく `hide_caption` を送ってもらえれば、overlay 側がふんわり fade-out で消す。
+
 ### v0.3.8 — ウィンドウ拡大で「フォントサイズ大で背景クリップ」修正
 
 v0.3.7 動作確認でやっさんから報告：「行間やブロック間隔、フォントサイズを大きくするとある程度は背景が広がるけど、途中から変化に追いつかない感じで背景をはみ出して（はみ出し部は非表示）しまう。あわせて角丸の部分も四角くなってしまう」。

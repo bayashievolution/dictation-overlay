@@ -28,13 +28,18 @@ const CAPABILITIES: &[&str] = &[
 /// Bottom margin (px) when auto-positioning on a monitor.
 const BOTTOM_MARGIN_PX: i32 = 80;
 
-/// v0.3.8: ウィンドウ自体のサイズをモニタに対するこの比率に合わせる。
-/// 字幕（フォントサイズや段落数で伸びる）がウィンドウ境界で切れないようにするため、
-/// 「字幕の物理サイズに合わせる」のではなく「ウィンドウは大きく取って中で flex-end」
-/// する設計にした。透明ウィンドウなので空き部分は見えず、クリックスルー ON なら
-/// 全領域がイベントスルー、OFF でも `.caption` だけが drag region なので空き部分は無害。
-const WINDOW_WIDTH_RATIO: f64 = 1.0; // モニタ幅 100%
-const WINDOW_HEIGHT_RATIO: f64 = 0.5; // モニタ高さ 50%（字幕が画面の半分まで縦に伸びても OK）
+/// v0.3.9: 起動時の暫定ウィンドウサイズ（モニタに対する比率）。
+/// 起動直後に WebView が `.caption` を描画し、ResizeObserver が `caption_resized`
+/// コマンドを叩いて実サイズに追従する。なので「最初の一瞬」だけこの比率が使われる。
+/// 大きすぎるとクリックスルー OFF 時に空白部分のクリックを overlay が受けるが、
+/// 起動直後は普通クリックスルー ON なので問題にならない。
+const WINDOW_WIDTH_RATIO: f64 = 0.6; // モニタ幅 60%
+const WINDOW_HEIGHT_RATIO: f64 = 0.15; // モニタ高さ 15%（暫定、ResizeObserver 起動でぴったりに）
+
+/// v0.3.9: caption_resized で計算するウィンドウ余白（px）。
+/// 字幕の outer サイズ + 余白 がウィンドウサイズ。`#stage` の padding 16px と
+/// 同じく上下左右に取って、字幕がウィンドウ境界に密着しないようにする。
+const WINDOW_PADDING_PX: u32 = 16;
 
 /// How long to wait between position_changed emits (debounce).
 const POSITION_REPORT_INTERVAL_MS: u64 = 150;
@@ -58,8 +63,47 @@ fn send(msg: &OutMessage) {
     let _ = send_message(msg);
 }
 
+/// v0.3.9: WebView から呼ばれる。`.caption` のサイズが変わるたびに
+/// ウィンドウサイズも追従させる。この設計で:
+///   ① フォント大やブロック間隔大でもウィンドウ境界でクリップされない
+///   ② クリックスルー OFF 時に「字幕より上の透明な空白領域」が消えるので、
+///      マウスイベントが下のアプリに自然に届く
+/// 位置は「ウィンドウの下端を保つ（縦に伸びる時は上に伸びる）」ため、
+/// 既存の outer_position を起点に高さ差分を上に足す。
+#[tauri::command]
+fn caption_resized(window: WebviewWindow, width: u32, height: u32) {
+    let win_w = (width + WINDOW_PADDING_PX * 2).max(120);
+    let win_h = (height + WINDOW_PADDING_PX * 2).max(60);
+
+    let (old_pos, old_size) = match (window.outer_position(), window.outer_size()) {
+        (Ok(p), Ok(s)) => (p, s),
+        _ => {
+            let _ = window.set_size(PhysicalSize::new(win_w, win_h));
+            return;
+        }
+    };
+
+    // 下端を保つように y を再計算
+    let new_y = old_pos.y + old_size.height as i32 - win_h as i32;
+    // x は中央維持（旧 x + (旧幅 - 新幅) / 2）
+    let new_x = old_pos.x + (old_size.width as i32 - win_w as i32) / 2;
+
+    let _ = window.set_size(PhysicalSize::new(win_w, win_h));
+    let _ = window.set_position(PhysicalPosition::new(new_x, new_y));
+}
+
+/// v0.3.9: WebView から呼ばれる。fade-out アニメーション完了後に呼ばれて
+/// 実際にウィンドウを隠す。`hide_caption` は Rust 側で直接 `window.hide()`
+/// せず、まず `fade-out-and-hide` イベントを emit → JS が CSS アニメ後に
+/// この command を呼ぶ、という流れ。
+#[tauri::command]
+fn window_hide(window: WebviewWindow) {
+    let _ = window.hide();
+}
+
 fn main() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![caption_resized, window_hide])
         .setup(|app| {
             // ---- Window setup --------------------------------------------
             if let Some(w) = app.get_webview_window("main") {
@@ -218,9 +262,9 @@ fn handle_message(app: &tauri::AppHandle, msg: InMessage) {
             sync_visible(app, true);
         }
         InMessage::HideCaption => {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.hide();
-            }
+            // v0.3.9: 直接 hide せず、fade-out イベントを emit。WebView 側で
+            // CSS フェード（220ms）を再生してから window_hide コマンドを叩く。
+            let _ = app.emit("fade-out-and-hide", ());
             sync_visible(app, false);
         }
         InMessage::UpdateStyle { settings } => {

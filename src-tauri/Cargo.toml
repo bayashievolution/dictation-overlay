@@ -1,6 +1,6 @@
 [package]
 name = "dictation-overlay"
-version = "0.3.8"
+version = "0.3.9"
 edition = "2021"
 description = "Native helper for dictation-beta — transparent OS-level caption overlay"
 authors = ["bayashi"]

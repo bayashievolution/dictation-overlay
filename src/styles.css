@@ -22,11 +22,12 @@ html, body {
 }
 
 .caption {
-  /* v0.3.7: ハードコードされていた数値を CSS 変数化。
-     applySettings() で borderRadius / paddingX / paddingY / blockGapTenth を受け取って
-     それぞれを書き換える。未指定時は変数のフォールバック値が使われる。 */
-  padding: var(--cap-padding-y, 10px) var(--cap-padding-x, 24px);
-  border-radius: var(--cap-border-radius, 8px);
+  /* v0.3.15: CSS 変数経由を撤去し、ハードコード値に戻す。
+     applySettings() が JS で直接 inline style に書き換える方式（main.js）。
+     CSS 変数経由は WebView2 で何らかの理由で効かない事故があり、
+     確実性重視で inline style 直書きに切り替え。 */
+  padding: 10px 24px;
+  border-radius: 8px;
   font-size: 64px;
   font-weight: 600;
   line-height: 1.3;
@@ -61,14 +62,11 @@ html, body {
 }
 
 /* v0.3.7: 段落間の隙間。dictation-beta は text を \n{2,} で段落区切りで送ってくる。
-   main.js が <p> 要素に分割するので、margin-bottom を CSS 変数で制御。
-   blockGapTenth の値（0〜25）÷ 10 を em で適用、デフォルトは 0em（隙間なし）。 */
+   main.js が <p> 要素に分割し、blockGapTenth が来たら main.js が個別 p の
+   margin-bottom を inline style で書き換える（CSS 変数撤去・v0.3.15）。 */
 .caption p {
-  margin: 0 0 var(--cap-block-gap, 0em);
+  margin: 0;
   padding: 0;
-}
-.caption p:last-child {
-  margin-bottom: 0;
 }
 
 /* v0.3.6: テキストトランジション。

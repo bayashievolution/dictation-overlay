@@ -219,6 +219,23 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.15 — CSS 変数経由を撤去、JS から直接 inline style 書き込み
+
+v0.3.14 で「0 ベタ送信を removeProperty で fallback」したが、やっさん検証で **「相変わらずパディングと角丸が適用されない、縦パディングだけ若干動くけど想定外」** 報告。CSS 変数 (`var(--cap-*, fallback)`) 経由のロジックが WebView2 で何らかの理由で確実に動いていない可能性。
+
+#### 修正方針：CSS 変数を撤去、JS で直接 inline style に書く
+- `src/main.js`：`caption.style.setProperty('--cap-*')` を `caption.style.borderRadius = ...` `caption.style.paddingLeft = ...` 等に変更
+- `src/styles.css`：`.caption` の `padding: var(...)` `border-radius: var(...)` をハードコード値（10px 24px / 8px）に戻す
+- 起動時に `initInlineDefaults()` で inline style に 8px / 24px / 10px をベタ書き
+- `applySettings()` で beta から値が来たら inline style を上書き
+- 0 ベタ送信のときも「未設定 = デフォルト値」として inline style を設定
+- `blockGapTenth` も `<p>` 要素の `margin-bottom` を inline style で書き換える方式
+
+#### 学び
+- CSS 変数経由は柔軟だが、ブラウザ実装差や 推論しにくいトラブルが出ることがある
+- **確実性重視のときは JS で inline style 直書き**が最も予測可能
+- `inline style > CSS 変数 > CSS ハードコード` の優先度を意識した設計を心がける
+
 ### v0.3.14 — beta `Number()||0` 仕様への短期回避
 
 v0.3.13 でも padding/角丸が見えない件、コンソールログから ready=0.3.13 確認・サイズ追従も動作確認できたが見た目は変わらず。dictation-beta v0.13.29 の captions.js を確認したら：

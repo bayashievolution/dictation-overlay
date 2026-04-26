@@ -63,40 +63,37 @@
         currentTransition = s.transition;
       }
     }
-    // v0.3.7: borderRadius / paddingX / paddingY / blockGapTenth (CSS 変数化)
-    // v0.3.14: dictation-beta v0.13.x が `Number(s.X) || 0` パターンで undefined を 0 に
-    // 丸めて送ってくる仕様 → overlay 側で 0 を CSS 変数に書き込むと padding/角丸が
-    // 消える事故になる（やっさん「これまでできてたパディングや角丸が一切なくなった」報告）。
-    // 短期回避：0 は「未設定の 0」と解釈して CSS 変数を removeProperty し、CSS の
-    // fallback 値（24/10/8/0em）が効くようにする。beta 側で `?? 0` 等で undefined と
-    // 0 を区別する修正が入ったら、ここの「`> 0` ガード」を撤去できる。
+    // v0.3.7: borderRadius / paddingX / paddingY / blockGapTenth
+    // v0.3.14: 0 ベタ送信を removeProperty で fallback 動作に
+    // v0.3.15: CSS 変数経由（ var(--cap-*, fallback) ）が WebView2 で何らかの
+    // 理由で効かない事故が出たため、**JS で直接 inline style に書く**方式に変更。
+    // 確実性重視。CSS 変数の経路は撤去（styles.css 側もハードコードに戻す）。
+    // 0 / undefined のときはデフォルト値（8/24/10/0）を inline 設定。
     if (s.borderRadius !== undefined) {
-      if (Number(s.borderRadius) > 0) {
-        caption.style.setProperty('--cap-border-radius', Number(s.borderRadius) + 'px');
-      } else {
-        caption.style.removeProperty('--cap-border-radius');
-      }
+      const v = Number(s.borderRadius);
+      caption.style.borderRadius = (v > 0 ? v : 8) + 'px';
     }
     if (s.paddingX !== undefined) {
-      if (Number(s.paddingX) > 0) {
-        caption.style.setProperty('--cap-padding-x', Number(s.paddingX) + 'px');
-      } else {
-        caption.style.removeProperty('--cap-padding-x');
-      }
+      const v = Number(s.paddingX);
+      const px = (v > 0 ? v : 24) + 'px';
+      caption.style.paddingLeft = px;
+      caption.style.paddingRight = px;
     }
     if (s.paddingY !== undefined) {
-      if (Number(s.paddingY) > 0) {
-        caption.style.setProperty('--cap-padding-y', Number(s.paddingY) + 'px');
-      } else {
-        caption.style.removeProperty('--cap-padding-y');
-      }
+      const v = Number(s.paddingY);
+      const py = (v > 0 ? v : 10) + 'px';
+      caption.style.paddingTop = py;
+      caption.style.paddingBottom = py;
     }
     if (s.blockGapTenth !== undefined) {
-      if (Number(s.blockGapTenth) > 0) {
-        caption.style.setProperty('--cap-block-gap', (Number(s.blockGapTenth) / 10) + 'em');
-      } else {
-        caption.style.removeProperty('--cap-block-gap');
-      }
+      const v = Number(s.blockGapTenth);
+      // p 子要素の margin-bottom を直接書き換える（一括）
+      const gap = (v > 0 ? v / 10 : 0) + 'em';
+      const ps = caption.querySelectorAll('p');
+      ps.forEach((p, i) => {
+        if (i < ps.length - 1) p.style.marginBottom = gap;
+        else p.style.marginBottom = '0';
+      });
     }
   }
 
@@ -182,12 +179,23 @@
   // なった（旧 v0.3.10 で導入したが今は無害）。`.caption` の幅はテキスト + padding
   // に自然に追従し、ウィンドウは ResizeObserver で `.caption` のサイズに合わせる。
 
+  // v0.3.15: 起動時にデフォルト値を inline style にベタ書き。
+  // beta から settings が来る前から padding/角丸が見えるようにする。
+  function initInlineDefaults() {
+    caption.style.borderRadius = '8px';
+    caption.style.paddingLeft = '24px';
+    caption.style.paddingRight = '24px';
+    caption.style.paddingTop = '10px';
+    caption.style.paddingBottom = '10px';
+  }
+
   function bind() {
     const api = window.__TAURI__;
     if (!api || !api.event || typeof api.event.listen !== 'function') {
       setTimeout(bind, 50);
       return;
     }
+    initInlineDefaults();
     api.event.listen('show-caption', (evt) => {
       const p = evt && evt.payload;
       if (!p) return;

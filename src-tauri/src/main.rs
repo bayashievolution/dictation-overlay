@@ -28,13 +28,18 @@ const CAPABILITIES: &[&str] = &[
 /// Bottom margin (px) when auto-positioning on a monitor.
 const BOTTOM_MARGIN_PX: i32 = 80;
 
-/// v0.3.9: 起動時の暫定ウィンドウサイズ（モニタに対する比率）。
-/// 起動直後に WebView が `.caption` を描画し、ResizeObserver が `caption_resized`
-/// コマンドを叩いて実サイズに追従する。なので「最初の一瞬」だけこの比率が使われる。
-/// 大きすぎるとクリックスルー OFF 時に空白部分のクリックを overlay が受けるが、
-/// 起動直後は普通クリックスルー ON なので問題にならない。
-const WINDOW_WIDTH_RATIO: f64 = 0.6; // モニタ幅 60%
-const WINDOW_HEIGHT_RATIO: f64 = 0.15; // モニタ高さ 15%（暫定、ResizeObserver 起動でぴったりに）
+/// v0.3.9 (起動時暫定) → v0.3.10 で見直し：
+/// 暫定サイズが「狭い」と CSS の `max-width: calc(100vw - 32px)` が効いて
+/// `.caption` 幅も狭くなり、日本語が文字単位で縦に折り返す → ResizeObserver
+/// が「縦長」を観測してさらに細くするフィードバックループに陥った（やっさんの
+/// 「縦書きになってる」現象）。
+///
+/// 対策：起動時暫定はモニタ幅 100%・高さ 25% と広めに取り、`.caption` が
+/// 内容幅で自然に inline-block レイアウトされてから ResizeObserver で
+/// 縮小するフローに。透明ウィンドウなのでデカく取っても見た目に問題なし、
+/// 起動直後はクリックスルー ON なので空き部分も無害。
+const WINDOW_WIDTH_RATIO: f64 = 1.0; // モニタ幅 100%（暫定、即追従）
+const WINDOW_HEIGHT_RATIO: f64 = 0.25; // モニタ高さ 25%（暫定、即追従）
 
 /// v0.3.9: caption_resized で計算するウィンドウ余白（px）。
 /// 字幕の outer サイズ + 余白 がウィンドウサイズ。`#stage` の padding 16px と

@@ -219,6 +219,28 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.10 — 縦書き化フィードバックループの緊急修正
+
+v0.3.9 ship 直後にやっさんから「縦書きになってる www」+ スクショ報告。字幕が 1 文字ずつ縦に並んで画面端まで伸びてた。
+
+#### 原因
+1. v0.3.9 の起動時暫定ウィンドウサイズが `WIDTH_RATIO=0.6 / HEIGHT_RATIO=0.15`（モニタ幅 60% / 高さ 15%）で**狭め**だった
+2. `.caption` の CSS `max-width: calc(100vw - 32px)` でウィンドウ幅 60% に合わせて狭く
+3. 日本語は文字単位で折り返すルール（`word-break` 不要、文字境界で改行可）→ 狭い `.caption` で文字が縦に並んだ
+4. `ResizeObserver` がその「細長い `.caption`」を観測して `caption_resized` 発火
+5. ウィンドウが「縦長 + 細幅」に縮む → さらに `.caption` が狭まる → 永遠フィードバックループ
+6. 結果：1 文字幅まで縮んで縦書き表示、めちゃ笑える見た目に
+
+#### 修正
+1. **`src-tauri/src/main.rs`**：起動時暫定ウィンドウを `WIDTH_RATIO=1.0 / HEIGHT_RATIO=0.25`（モニタ幅 100% / 高さ 25%）に拡大。**広く起動して縮める**フローにする。透明ウィンドウなので大きく取っても無害、起動直後はクリックスルー ON なので空き部分も無害
+2. **`src/main.js`**：`pinMaxWidthToScreen()` を新設。`window.screen.availWidth - 32` を `caption.style.maxWidth` に直接書き込む。`screen.availWidth` はウィンドウサイズに左右されない物理スクリーン値なので、たとえウィンドウが何らかの理由で狭まっても `.caption` の max-width は画面幅を保つ。**保険**として CSS の `max-width: calc(100vw - 32px)` も残置
+3. `bind()` 起動時に 1 回 + `window.resize` イベントで再設定（モニタ切替や DPI 変化に追従）
+
+#### 教訓
+- ResizeObserver でフィードバックループを作る時は、**初期状態が「狭くない」こと**を保証する必要がある
+- CSS で `100vw` を使うと「ウィンドウ幅」基準になる。`screen.availWidth` の方が物理スクリーン基準で安定
+- 「動的追従」設計はこういうループに気を付けるべき。次同じ系を組む時は「コンテンツの自然サイズで一度測ってから縮める」フローを最初から確認
+
 ### v0.3.9 — ウィンドウサイズ動的追従 + fade-out + 初期テキスト変更
 
 やっさんから 2 件報告：

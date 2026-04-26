@@ -32,12 +32,13 @@ html, body {
   line-height: 1.3;
   text-align: center;
   /* 背景自動サイズ：内容に応じて伸び縮みする inline-block 風挙動。
-     画面端で必ず折り返すよう max-width と word-break を入れる。
-     これでフォントサイズを変えても上下にはみ出さず、長文も枠内で改行する。 */
+     v0.3.8: word-break/overflow-wrap を外して自動折り返しを止める。
+     折り返しは text 内の `\n` のみで起こる仕様（やっさん明示）。
+     max-width は「ウィンドウ幅 - #stage padding 32px」で、
+     超長文 1 行なら横にハミ出すが OS のウィンドウ境界で見切れる前に
+     ウィンドウ自体を広く取ってある（main.rs WINDOW_*_RATIO 参照）。 */
   display: inline-block;
-  max-width: 92%;
-  word-break: break-word;
-  overflow-wrap: break-word;
+  max-width: calc(100vw - 32px);
   white-space: pre-wrap;
   color: #ffffff;
   background: rgba(0, 0, 0, 0.7);

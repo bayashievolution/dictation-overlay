@@ -28,6 +28,14 @@ const CAPABILITIES: &[&str] = &[
 /// Bottom margin (px) when auto-positioning on a monitor.
 const BOTTOM_MARGIN_PX: i32 = 80;
 
+/// v0.3.8: ウィンドウ自体のサイズをモニタに対するこの比率に合わせる。
+/// 字幕（フォントサイズや段落数で伸びる）がウィンドウ境界で切れないようにするため、
+/// 「字幕の物理サイズに合わせる」のではなく「ウィンドウは大きく取って中で flex-end」
+/// する設計にした。透明ウィンドウなので空き部分は見えず、クリックスルー ON なら
+/// 全領域がイベントスルー、OFF でも `.caption` だけが drag region なので空き部分は無害。
+const WINDOW_WIDTH_RATIO: f64 = 1.0; // モニタ幅 100%
+const WINDOW_HEIGHT_RATIO: f64 = 0.5; // モニタ高さ 50%（字幕が画面の半分まで縦に伸びても OK）
+
 /// How long to wait between position_changed emits (debounce).
 const POSITION_REPORT_INTERVAL_MS: u64 = 150;
 
@@ -314,20 +322,28 @@ fn position_reporter_loop(window: WebviewWindow) {
     }
 }
 
-/// Place the window horizontally centered, with a fixed margin from the bottom
-/// of the given monitor.
+/// Resize the window to the configured monitor ratio and place it on the
+/// bottom-center of the given monitor.
+///
+/// v0.3.8: 以前は tauri.conf.json で固定サイズ (1200×160) を outer_size として
+/// 使ってたが、フォントサイズ大やブロック間隔大で字幕がそこを超えると
+/// ウィンドウ境界でクリップされて角丸が切れる問題があった。
+/// 今は monitor サイズに対する比率でウィンドウを大きめに取り、字幕は中で
+/// flex-end 配置 → 字幕の物理サイズが伸びてもウィンドウ内に収まる。
 fn position_on_monitor_bottom(
     window: &WebviewWindow,
     monitor: &Monitor,
     margin_bottom: i32,
 ) -> tauri::Result<()> {
-    let win_size = window.outer_size()?;
     let mon_pos = monitor.position();
     let mon_size = monitor.size();
-    let win_w = win_size.width as i32;
-    let win_h = win_size.height as i32;
     let mon_w = mon_size.width as i32;
     let mon_h = mon_size.height as i32;
+
+    let win_w = ((mon_w as f64) * WINDOW_WIDTH_RATIO) as i32;
+    let win_h = ((mon_h as f64) * WINDOW_HEIGHT_RATIO) as i32;
+    window.set_size(PhysicalSize::new(win_w as u32, win_h as u32))?;
+
     let x = mon_pos.x + (mon_w - win_w).max(0) / 2;
     let y = mon_pos.y + (mon_h - win_h - margin_bottom).max(0);
     window.set_position(PhysicalPosition::new(x, y))?;

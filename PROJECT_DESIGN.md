@@ -219,6 +219,35 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.7 — settings 拡張＋段落分け＋Google Fonts 読み込み
+
+dictation-beta カルディ２からの依頼（5 項目）。dictation-beta v0.13.31 で送信側は実装済み、overlay 側で受け取って反映するだけ。
+
+#### 実装
+
+1. **`src/index.html`**：dictation-beta `captions.html` と同じセットの Google Fonts を `<link>` で読み込み（Noto Sans JP / Noto Serif JP / M PLUS 1p / Zen Kaku Gothic New / Kosugi Maru / Sawarabi Gothic / Shippori Mincho / Klee One / Yomogi / Source Code Pro）。`fontFamily` 設定がそのまま効くようになる。やっさん「フォント変更が効かない」報告の根本対応
+2. **`src/styles.css`**：
+   - `.caption` の `padding`, `border-radius` を CSS 変数化（`--cap-padding-x/y`, `--cap-border-radius`）。フォールバックは現行値（10px 24px / 8px）
+   - `display: inline-block` + `max-width: 92%` + `word-break: break-word` + `overflow-wrap: break-word`：背景自動サイズ調整、長文も画面端で折り返す
+   - `.caption p { margin: 0 0 var(--cap-block-gap, 0em); }`：段落間 margin を CSS 変数で制御
+3. **`src/main.js`**：
+   - `applySettings()` に `borderRadius` / `paddingX` / `paddingY` / `blockGapTenth` のハンドリング追加。CSS 変数を `setProperty()` で書き換える
+   - 新規 `applyParagraphs(text)`：text を `\n{2,}` で段落分けして `<p>` 要素に分割。段落内の `\n` は `<br>` に。dictation-beta `captions.js` `renderTextIntoBox` と同じルール
+   - `setText()` は `caption.textContent = text` から `applyParagraphs(text)` に変更
+4. **`NATIVE_MESSAGING_SPEC.md`**：v0.3.7 に。`settings.borderRadius` / `paddingX/Y` / `blockGapTenth` の仕様、`text` の段落分け規則、実装状況表を更新
+
+#### 設計判断
+
+- **innerHTML を使わず DOM API**：`applyParagraphs` で段落を組み立てる時に `innerHTML` 経由は XSS 的に避ける。`document.createElement` + `createTextNode` + `appendChild` で安全に。
+- **段落区切りは `\n{2,}`**：dictation-beta の `captions.js:1119` `tmp.textContent.trim().split(/\n{2,}/)` と同じ。これでスペックが揃う
+- **CSS 変数のフォールバック**：旧 dictation-beta（v0.13.30 以前）が `borderRadius` 等を送ってこない場合、変数未設定 → フォールバック値（既存挙動）が使われる。後方互換 OK
+- **`display: inline-block`**：以前は `display` 未指定（デフォルト block）だったので、`max-width: 92%` だけだと幅 92% が固定された。`inline-block` にしたことで内容に合わせて伸び縮み + 画面端で折り返し。CLAUDE.md ルール 8（既存挙動を変えない）の限界ケース：「既存挙動を変えないと依頼を満たせない」場合は変える、ただし試行錯誤ログにここで判断の経緯を残す
+- **`word-break: break-word; overflow-wrap: break-word;`**：長い英単語や URL も枠内で折り返す。日本語は元から自由に折り返せる
+
+#### 残課題
+
+- **5 番のスクロール演出**（`data-slice-ts` ベースの段落単位アニメ）は今回見送り。優先度低の自己申告どおり、後日まとめて対応
+
 ### v0.3.6 — テキストトランジション 5 種
 
 dictation-beta カルディ２からの依頼。dictation-beta v0.13.12 で「ストリームモード」が追加され、`show_caption.text` が 150〜800ms 間隔で連発されるようになった。今までは丸ごと書き換えるだけでスクロール感がない。字幕ウィンドウと同じ CSS トランジションを overlay にも入れて見た目を揃えてほしい、という要望。

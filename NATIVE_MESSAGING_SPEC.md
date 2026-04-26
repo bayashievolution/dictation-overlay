@@ -86,14 +86,21 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
     "strokeColor": "#000000",
     "strokeWidth": 2,
     "lineHeightTenth": 13,
-    "transition": "fade"
+    "transition": "fade",
+    "borderRadius": 8,
+    "paddingX": 24,
+    "paddingY": 10,
+    "blockGapTenth": 0
   }
 }
 ```
 
-- `text`：必須。改行 `\n`、継続マーカー `→` などは文字列として埋めて送る。
+- `text`：必須。改行 `\n`、継続マーカー `→` などは文字列として埋めて送る。**v0.3.7〜：`\n{2,}`（2 つ以上の連続改行）は段落区切りとして扱われ、`<p>` 要素に分割される。段落内の `\n` は `<br>` 換算。** dictation-beta の `renderTextIntoBox` と同じルール。
 - `settings`：任意。指定フィールドだけ更新する（ネイティブ側は直前の値を保持）。
-- **`transition`** (v0.3.6〜)：テキスト更新時のアニメーション種別。`"none"` / `"fade"` / `"slide-right"` / `"slide-left"` / `"scroll-up"` の 5 値（`none` 以外を指定するとテキスト変化時に 180ms の CSS アニメーションが入る）。デフォルトは `"none"`（v0.3.5 以前と同じ挙動を後方互換で維持）。同じ `text` を再送した場合（スタイル変更だけしたいときなど）はアニメーションは走らない。
+- **`transition`** (v0.3.6〜)：テキスト更新時のアニメーション種別。`"none"` / `"fade"` / `"slide-right"` / `"slide-left"` / `"scroll-up"` の 5 値。デフォルトは `"none"`。同じ `text` 再送時はアニメーションは走らない。
+- **`borderRadius`** (v0.3.7〜)：字幕ボックスの角丸 (px、0〜32 推奨)。CSS 変数 `--cap-border-radius` 経由で反映。
+- **`paddingX`** / **`paddingY`** (v0.3.7〜)：字幕ボックスの内側余白 (px)。それぞれ左右と上下のパディング。CSS 変数 `--cap-padding-x` / `--cap-padding-y` 経由。
+- **`blockGapTenth`** (v0.3.7〜)：段落間 (`<p>` 要素間) の余白。`em` 単位の値を 10 倍した整数 (0〜25 推奨)。例: `13` → `1.3em` の `margin-bottom`。
 - **推奨デバウンス**：拡張側で 50〜100ms。連続フレームを間引いてネイティブへの負荷を減らす。
 
 #### `hide_caption`
@@ -181,7 +188,7 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 ```json
 {
   "type": "ready",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "platform": "windows",
   "capabilities": [
     "transparency", "always-on-top", "click-through",
@@ -196,7 +203,8 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
   - Phase 2 (v0.2.0)：`click-through` / `multi-monitor` が追加
   - Phase 3a (v0.3.0)：`position-report` が追加（`position_changed` メッセージが届くようになる）
   - Phase 3b (v0.3.1)：`tray-menu` が追加（ユーザーが OS のシステムトレイから操作できる）
-  - **v0.3.6：`transition` が追加**（`settings.transition` で字幕更新時のアニメーションを指定できる）
+  - v0.3.6：`transition` が追加（`settings.transition` で字幕更新時のアニメーションを指定できる）
+  - **v0.3.7：capabilities 配列に追加なし。`settings` 側に `borderRadius` / `paddingX/Y` / `blockGapTenth` を新設、`text` の `\n{2,}` 段落分けを正式仕様化**
   - 将来：`chroma-key` / `context-menu` などが追加される予定
 
 #### `pong`

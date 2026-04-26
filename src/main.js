@@ -54,6 +54,40 @@
         currentTransition = s.transition;
       }
     }
+    // v0.3.7: borderRadius (px, 0〜32)、CSS 変数経由で .caption に反映
+    if (s.borderRadius !== undefined) {
+      caption.style.setProperty('--cap-border-radius', Number(s.borderRadius) + 'px');
+    }
+    // v0.3.7: paddingX / paddingY（px）
+    if (s.paddingX !== undefined) {
+      caption.style.setProperty('--cap-padding-x', Number(s.paddingX) + 'px');
+    }
+    if (s.paddingY !== undefined) {
+      caption.style.setProperty('--cap-padding-y', Number(s.paddingY) + 'px');
+    }
+    // v0.3.7: blockGapTenth（em x 10、0〜25）→ em 単位の段落間 margin
+    if (s.blockGapTenth !== undefined) {
+      caption.style.setProperty('--cap-block-gap', (Number(s.blockGapTenth) / 10) + 'em');
+    }
+  }
+
+  // v0.3.7: text を <p> 段落に分割して挿入する。
+  // dictation-beta は \n{2,} を段落区切り、\n は段落内の改行（line break）として送ってくる
+  // （captions.js の renderTextIntoBox 同等のルール）。
+  function applyParagraphs(text) {
+    // 全 child を退避してから新規挿入（DOM 直接操作で innerHTML 経由を避ける = XSS 対策）
+    while (caption.firstChild) caption.removeChild(caption.firstChild);
+    const blocks = String(text).split(/\n{2,}/);
+    for (const block of blocks) {
+      const p = document.createElement('p');
+      // 段落内の \n は <br> に
+      const lines = block.split('\n');
+      lines.forEach((line, i) => {
+        if (i > 0) p.appendChild(document.createElement('br'));
+        if (line.length > 0) p.appendChild(document.createTextNode(line));
+      });
+      caption.appendChild(p);
+    }
   }
 
   function setText(text) {
@@ -61,7 +95,7 @@
     // 同じテキストの再送（スタイルだけ変えたい時など）はアニメーション不要
     const changed = text !== lastText;
     lastText = text;
-    caption.textContent = text;
+    applyParagraphs(text);
     if (!changed) return;
     if (currentTransition === 'none') return;
 

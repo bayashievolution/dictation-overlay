@@ -219,6 +219,35 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.11 — 縦書き化の根本修正（white-space: pre）
+
+v0.3.10 で「ウィンドウ起動時暫定を広く + screen.availWidth で max-width 固定」したが、やっさん検証で**まだ縦書きのまま**。
+
+#### 推測される原因
+- WebView2 環境で `window.screen.availWidth` が想定値を返さない可能性（プライマリモニタ幅 vs 仮想デスクトップ幅 vs 別の値）
+- `white-space: pre-wrap` の仕様で、CJK 文字は単語境界が「文字単位」とみなされる → max-width が小さい瞬間があれば文字単位で折り返す
+- どこかで max-width が極端に小さい値になっている瞬間があり、その時に文字境界で折り返してフィードバックループに入る
+
+#### 根本対処
+`white-space: pre-wrap` → **`white-space: pre`** に変更。
+
+| 値 | 改行 (`\n`) | 自動折り返し |
+|---|---|---|
+| `pre-wrap` | 尊重 | する（コンテナ幅で） |
+| `pre` | 尊重 | **しない** |
+
+`pre` なら max-width が何であれ自動折り返しは絶対に起こらない。改行は text 内の `\n` のみ（やっさん明示の仕様）。
+
+#### 副作用
+- 超長文 1 行（`\n` 無し）が画面幅を超える時、字幕が画面右にはみ出して見えなくなる
+- ただし dictation-beta はテキストを `\n{2,}` 段落分けして送ってくるので、1 行で画面幅を超えるケースは稀
+- もし超えても **画面端で切れるだけ**で、縦書き化のような壊れた表示にはならない
+
+#### v0.3.10 で入れた pinMaxWidthToScreen() は維持
+- `screen.availWidth - 32` を `caption.style.maxWidth` に書き込む保険ロジックは残置
+- `white-space: pre` でも max-width が効く局面（例：将来 word-break を再導入したい時）に役立つ
+- 害もないので残置
+
 ### v0.3.10 — 縦書き化フィードバックループの緊急修正
 
 v0.3.9 ship 直後にやっさんから「縦書きになってる www」+ スクショ報告。字幕が 1 文字ずつ縦に並んで画面端まで伸びてた。

@@ -33,13 +33,13 @@ html, body {
   text-align: center;
   /* 背景自動サイズ：内容に応じて伸び縮みする inline-block 風挙動。
      v0.3.8: word-break/overflow-wrap を外して自動折り返しを止める。
-     折り返しは text 内の `\n` のみで起こる仕様（やっさん明示）。
-     max-width は「ウィンドウ幅 - #stage padding 32px」で、
-     超長文 1 行なら横にハミ出すが OS のウィンドウ境界で見切れる前に
-     ウィンドウ自体を広く取ってある（main.rs WINDOW_*_RATIO 参照）。 */
+     v0.3.11: white-space: pre-wrap → pre。pre-wrap でも日本語は CJK 特性で
+     文字境界で折り返してしまう（max-width が小さい瞬間があると縦書き化する）。
+     pre なら自動折り返し完全停止、改行は text 内の `\n` のみ。
+     折り返しが要らない仕様はやっさん明示。 */
   display: inline-block;
   max-width: calc(100vw - 32px);
-  white-space: pre-wrap;
+  white-space: pre;
   color: #ffffff;
   background: rgba(0, 0, 0, 0.7);
   text-shadow: 0 0 6px #000;

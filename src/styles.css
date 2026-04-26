@@ -33,12 +33,14 @@ html, body {
   text-align: center;
   /* 背景自動サイズ：内容に応じて伸び縮みする inline-block 風挙動。
      v0.3.8: word-break/overflow-wrap を外して自動折り返しを止める。
-     v0.3.11: white-space: pre-wrap → pre。pre-wrap でも日本語は CJK 特性で
-     文字境界で折り返してしまう（max-width が小さい瞬間があると縦書き化する）。
-     pre なら自動折り返し完全停止、改行は text 内の `\n` のみ。
-     折り返しが要らない仕様はやっさん明示。 */
+     v0.3.11: white-space: pre-wrap → pre（CJK の文字境界折り返し防止）。
+     v0.3.12: max-width を撤去。max-width があると long-line で `.caption` が
+     その幅で止まり、テキストが両側にオーバーフロー → 背景・padding・角丸が
+     見えなくなる事故が起きた（やっさんスクショ）。撤去で `.caption` の幅 =
+     テキスト + padding になり、ウィンドウもこれに ResizeObserver で追従。
+     画面幅を超える長文は OS のウィンドウ境界で見切れるが、それは「\n を
+     入れて折り返してね」というやっさん明示の仕様の範囲。 */
   display: inline-block;
-  max-width: calc(100vw - 32px);
   white-space: pre;
   color: #ffffff;
   background: rgba(0, 0, 0, 0.7);

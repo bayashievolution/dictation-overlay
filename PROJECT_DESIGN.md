@@ -219,6 +219,33 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.12 — max-width 撤去で「padding/角丸が見えない」修正
+
+v0.3.11 で縦書き化は直ったが、やっさんスクショで「字幕の左右の padding が消えて、角丸も見えず、テキストが画面端まで広がってる」現象。
+
+#### 原因
+- `white-space: pre` で自動折り返しなし
+- 1 行のテキスト幅 > `max-width: calc(100vw - 32px)` の場合、`.caption` の幅は max-width で止まる
+- テキストは `text-align: center` で `.caption` 中央配置されるが、コンテンツ幅 > `.caption` 幅なので **両側にオーバーフロー**
+- オーバーフローしたテキストは `.caption` の background 領域外に描画される（背景なし）
+- 結果：テキストは画面端まで広がるが、`.caption` の background・padding・border-radius は max-width 内（中央 1888px）で見えてる
+- スクショだと両端の文字が中途半端に切れて、padding/角丸が消えて見える
+
+#### 修正
+- `src/styles.css`：`.caption { max-width: calc(100vw - 32px); }` を**撤去**
+- `src/main.js`：`pinMaxWidthToScreen()` を無効化（CSS 側に max-width が無くなったので不要）
+
+#### 結果
+- `.caption` の幅 = テキスト幅 + padding（`white-space: pre` でテキスト全幅）
+- ウィンドウは ResizeObserver で `.caption.offsetWidth + 32` に追従
+- ウィンドウ・`.caption`・テキストが完全に整合 → padding/角丸が常に見える
+- 画面幅を超える超長文は OS のウィンドウ境界で右側が見切れる（が「`\n` 入れて折り返す仕様」のやっさん明示通り）
+
+#### 学び
+- `inline-block` + `max-width` + `white-space: pre` の組み合わせは、コンテンツ幅 > max-width で**両側オーバーフロー**になる。textが center 寄せだと特に分かりにくい挙動
+- `white-space: pre` の世界では「max-width は意味がない or 害になる」。素直に「ウィンドウサイズが追従する」設計と相性が良い
+- v0.3.7→v0.3.8→v0.3.9→v0.3.10→v0.3.11→v0.3.12 で 5 段階かけてやっと「テキスト = `.caption` = ウィンドウ」の三位一体に到達。途中の試行錯誤を残しておく価値高（次同じ系を組む人が同じ罠を踏まないように）
+
 ### v0.3.11 — 縦書き化の根本修正（white-space: pre）
 
 v0.3.10 で「ウィンドウ起動時暫定を広く + screen.availWidth で max-width 固定」したが、やっさん検証で**まだ縦書きのまま**。

@@ -156,15 +156,9 @@
     }, 220);
   }
 
-  // v0.3.10: 縦書き化防止の保険。
-  // .caption の max-width は CSS 側で `calc(100vw - 32px)` だが、ウィンドウが
-  // 何らかの理由で狭まると max-width も狭くなり、日本語が文字単位で折り返して
-  // 縦長になる事故が起きる（v0.3.9 で発生）。そこで物理スクリーン幅を基準にした
-  // max-width に上書きしておく。screen.availWidth はウィンドウサイズに左右されない。
-  function pinMaxWidthToScreen() {
-    const sw = (window.screen && window.screen.availWidth) || 1920;
-    caption.style.maxWidth = Math.max(400, sw - 32) + 'px';
-  }
+  // v0.3.12: max-width を CSS から撤去したため pinMaxWidthToScreen() は不要に
+  // なった（旧 v0.3.10 で導入したが今は無害）。`.caption` の幅はテキスト + padding
+  // に自然に追従し、ウィンドウは ResizeObserver で `.caption` のサイズに合わせる。
 
   function bind() {
     const api = window.__TAURI__;
@@ -172,8 +166,6 @@
       setTimeout(bind, 50);
       return;
     }
-    pinMaxWidthToScreen();
-    window.addEventListener('resize', pinMaxWidthToScreen);
     api.event.listen('show-caption', (evt) => {
       const p = evt && evt.payload;
       if (!p) return;

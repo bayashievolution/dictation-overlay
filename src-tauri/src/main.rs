@@ -29,30 +29,17 @@ const CAPABILITIES: &[&str] = &[
 /// Bottom margin (px) when auto-positioning on a monitor.
 const BOTTOM_MARGIN_PX: i32 = 80;
 
-/// v0.3.9 (起動時暫定) → v0.3.10 で見直し：
-/// 暫定サイズが「狭い」と CSS の `max-width: calc(100vw - 32px)` が効いて
-/// `.caption` 幅も狭くなり、日本語が文字単位で縦に折り返す → ResizeObserver
-/// が「縦長」を観測してさらに細くするフィードバックループに陥った（やっさんの
-/// 「縦書きになってる」現象）。
-///
-/// 対策：起動時暫定はモニタ幅 100%・高さ 25% と広めに取り、`.caption` が
-/// 内容幅で自然に inline-block レイアウトされてから ResizeObserver で
-/// 縮小するフローに。透明ウィンドウなのでデカく取っても見た目に問題なし、
-/// 起動直後はクリックスルー ON なので空き部分も無害。
-const WINDOW_WIDTH_RATIO: f64 = 1.0; // モニタ幅 100%（暫定、即追従）
-const WINDOW_HEIGHT_RATIO: f64 = 0.25; // モニタ高さ 25%（暫定、即追従）
+/// v0.3.23: ウィンドウサイズを「動的追従」から「固定」に戻した。
+/// 経緯：v0.3.9 で ResizeObserver + caption_resized command で `.caption` の
+/// サイズに追従させたが、WebView の reflow と set_size がフィードバックループを
+/// 起こし、振動・クリッピング・スライダー追従不能・文字震え と段階的にバグが
+/// 噴出した。やっさんが「div の入れ子で簡単と思ってた」と言うのが本筋で、
+/// Web の常識通りウィンドウは固定・`.caption` は DOM 内で自然に伸びる方式に戻した。
+const WINDOW_WIDTH_RATIO: f64 = 1.0; // モニタ幅いっぱい（透明部分は無害）
+const WINDOW_HEIGHT_RATIO: f64 = 0.5; // モニタ高さの半分（字幕の伸び代を確保）
 
-/// v0.3.9: caption_resized で計算するウィンドウ余白（px）。
-/// 字幕の outer サイズ + 余白 がウィンドウサイズ。
-/// v0.3.21: 16px だと `.caption` の角丸や outline が WebView 境界に近すぎてクリップされ、
-/// ResizeObserver の微小揺れと相まって「上半分が消える」事故が起きた。
-/// 32px に倍増して余白を確保、揺れも吸収。
-const WINDOW_PADDING_PX: u32 = 32;
-
-/// v0.3.22: caption_resized は set_size 直後この時間内の再 invoke を無視する
-/// （クールダウン方式）。これで振動ループを止めつつ、ユーザーがスライダーを
-/// 連続的に動かす時もちゃんと追従する（クールダウン後の最終値で set_size）。
-const RESIZE_COOLDOWN_MS: u64 = 100;
+// v0.3.23: caption_resized は撤去（ResizeObserver 振動ループの根本原因）。
+// WINDOW_PADDING_PX / RESIZE_COOLDOWN_MS / LAST_RESIZE_TIME も不要。
 
 /// How long to wait between position_changed emits (debounce).
 const POSITION_REPORT_INTERVAL_MS: u64 = 150;
@@ -63,10 +50,6 @@ static STDOUT_LOCK: Mutex<()> = Mutex::new(());
 /// Set when the window emits a Moved or Resized event.
 /// The reporter thread clears it after sending one `position_changed`.
 static GEOMETRY_DIRTY: AtomicBool = AtomicBool::new(false);
-
-/// v0.3.22: 最後に caption_resized で set_size を呼んだ時刻。
-/// クールダウン期間中の再 invoke はスキップ → 振動ループ防止。
-static LAST_RESIZE_TIME: Mutex<Option<Instant>> = Mutex::new(None);
 
 /// Holds clones of the tray menu's check items so we can sync their visual
 /// state when the underlying state changes via Native Messaging.
@@ -80,55 +63,11 @@ fn send(msg: &OutMessage) {
     let _ = send_message(msg);
 }
 
-/// v0.3.9: WebView から呼ばれる。`.caption` のサイズが変わるたびに
-/// ウィンドウサイズも追従させる。この設計で:
-///   ① フォント大やブロック間隔大でもウィンドウ境界でクリップされない
-///   ② クリックスルー OFF 時に「字幕より上の透明な空白領域」が消えるので、
-///      マウスイベントが下のアプリに自然に届く
-/// 位置は「ウィンドウの下端を保つ（縦に伸びる時は上に伸びる）」ため、
-/// 既存の outer_position を起点に高さ差分を上に足す。
-#[tauri::command]
-fn caption_resized(window: WebviewWindow, width: u32, height: u32) {
-    // v0.3.22: クールダウン中はスキップ。set_size 直後の WebView リフローで
-    // `.caption` のサイズが微変化して再 invoke される振動ループ対策。
-    // 「微小しきい値で無視」から「時間ベースで無視」に変えた理由：
-    // しきい値方式は「ユーザーがスライダーを連続的に小さく動かす」ケースで
-    // 全部 no-op になって追従しない事故が起きた（v0.3.21 検証で発覚）。
-    {
-        let last = LAST_RESIZE_TIME.lock().unwrap();
-        if let Some(t) = *last {
-            if t.elapsed() < Duration::from_millis(RESIZE_COOLDOWN_MS) {
-                return;
-            }
-        }
-    }
-
-    let win_w = (width + WINDOW_PADDING_PX * 2).max(120);
-    let win_h = (height + WINDOW_PADDING_PX * 2).max(60);
-
-    let (old_pos, old_size) = match (window.outer_position(), window.outer_size()) {
-        (Ok(p), Ok(s)) => (p, s),
-        _ => {
-            let _ = window.set_size(PhysicalSize::new(win_w, win_h));
-            *LAST_RESIZE_TIME.lock().unwrap() = Some(Instant::now());
-            return;
-        }
-    };
-
-    // 完全同一サイズなら no-op（最低限のループ防止）
-    if win_w == old_size.width && win_h == old_size.height {
-        return;
-    }
-
-    // 下端を保つように y を再計算
-    let new_y = old_pos.y + old_size.height as i32 - win_h as i32;
-    // x は中央維持（旧 x + (旧幅 - 新幅) / 2）
-    let new_x = old_pos.x + (old_size.width as i32 - win_w as i32) / 2;
-
-    let _ = window.set_size(PhysicalSize::new(win_w, win_h));
-    let _ = window.set_position(PhysicalPosition::new(new_x, new_y));
-    *LAST_RESIZE_TIME.lock().unwrap() = Some(Instant::now());
-}
+// v0.3.23: caption_resized command 撤去。
+// ResizeObserver と組み合わせた動的ウィンドウサイズ追従が振動ループを起こすため、
+// ウィンドウは起動時固定（`WINDOW_*_RATIO` でモニタ全幅・高さ半分）に戻した。
+// `.caption` は WebView 内で `display: inline-block + flex-shrink: 0` で
+// コンテンツサイズに自然に追従する（Web の常識的な div レイアウト）。
 
 /// v0.3.9: WebView から呼ばれる。fade-out アニメーション完了後に呼ばれて
 /// 実際にウィンドウを隠す。`hide_caption` は Rust 側で直接 `window.hide()`
@@ -141,7 +80,7 @@ fn window_hide(window: WebviewWindow) {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![caption_resized, window_hide])
+        .invoke_handler(tauri::generate_handler![window_hide])
         .setup(|app| {
             // ---- Window setup --------------------------------------------
             if let Some(w) = app.get_webview_window("main") {

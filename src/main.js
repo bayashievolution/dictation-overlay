@@ -141,39 +141,9 @@
     caption.classList.add(cls);
   }
 
-  // ---- v0.3.9: Window size auto-tracking --------------------------------
-  // .caption のサイズが変わったら（フォントサイズ・段落数・ブロック間隔の変化）、
-  // ウィンドウもそれに追従させて「字幕の物理サイズ + 余白」になるようにする。
-  // これで:
-  //   ① フォント大でもウィンドウ境界でクリップされない
-  //   ② クリックスルー OFF 時に「字幕より上の透明な空白領域」が無くなり、
-  //      マウスイベントが下のアプリに通る
-  function setupResizeObserver() {
-    const invoke = getInvoke();
-    if (!invoke || typeof ResizeObserver === 'undefined') return;
-    let lastW = -1;
-    let lastH = -1;
-    let timer = null;
-    const ro = new ResizeObserver(() => {
-      const w = caption.offsetWidth;
-      const h = caption.offsetHeight;
-      if (w === 0 || h === 0) return;
-      // v0.3.22: しきい値を 8 → 1px に戻す。連続的にスライダーを動かす時に
-      // 1〜数 px の変化を毎回追従したい。振動ループは Rust 側のクールダウン
-      // (RESIZE_COOLDOWN_MS) で抑える方式に変更。
-      if (w === lastW && h === lastH) return;
-      lastW = w;
-      lastH = h;
-      console.log('[overlay debug] ResizeObserver fired:', w, 'x', h);
-      // デバウンス 60ms（連続的に動く時、最終値で送る）
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        invoke('caption_resized', { width: w, height: h }).catch(() => {});
-      }, 60);
-    });
-    ro.observe(caption);
-  }
+  // v0.3.23: ResizeObserver + caption_resized 動的ウィンドウサイズ追従は撤去。
+  // ウィンドウサイズは Rust 側で起動時固定。`.caption` は CSS で自由に伸び縮み。
+  // やっさんの「div の入れ子で簡単と思ってた」が正解。
 
   // ---- v0.3.9: Fade-out on hide_caption ---------------------------------
   // hide_caption 受信で window.hide() する前に CSS フェードアウトを挟む。
@@ -204,25 +174,6 @@
     caption.style.paddingBottom = '10px';
   }
 
-  // v0.3.19: デバッグ用 — caption の style 属性変化を MutationObserver で監視。
-  // 「inline style に 32px 入れたのに直角に見える」事故を追うため、誰が何時に
-  // 何の style を変えたかを Console に流す。
-  function installStyleWatcher() {
-    if (typeof MutationObserver === 'undefined') return;
-    const obs = new MutationObserver((muts) => {
-      for (const m of muts) {
-        if (m.type === 'attributes' && m.attributeName === 'style') {
-          // style.cssText を吐く（誰が書き換えても捕捉できる）
-          console.log('[overlay debug] caption.style mutated -> ',
-            caption.style.borderRadius || '(no border-radius)',
-            '|', caption.style.padding || '(no padding)',
-            '|', caption.style.cssText.slice(0, 200));
-        }
-      }
-    });
-    obs.observe(caption, { attributes: true, attributeFilter: ['style'] });
-  }
-
   function bind() {
     const api = window.__TAURI__;
     if (!api || !api.event || typeof api.event.listen !== 'function') {
@@ -230,28 +181,21 @@
       return;
     }
     initInlineDefaults();
-    installStyleWatcher();
     api.event.listen('show-caption', (evt) => {
       const p = evt && evt.payload;
       if (!p) return;
-      // v0.3.19 debug: 受信した settings をそのまま log
-      console.log('[overlay debug] show-caption payload.settings:', p.settings);
       // show 直後に fade-out 残留があったら即剥がす（show が来たら即不透明に戻す）
       caption.classList.remove('fading-out');
       applySettings(p.settings);
       setText(p.text);
     });
     api.event.listen('update-style', (evt) => {
-      // v0.3.19 debug
-      console.log('[overlay debug] update-style payload:', evt && evt.payload);
       applySettings(evt && evt.payload);
     });
     // v0.3.9: hide-caption は Rust から「フェードアウトして消す」イベントとして受信
     api.event.listen('fade-out-and-hide', () => {
       fadeOutAndHide();
     });
-
-    setupResizeObserver();
   }
 
   bind();

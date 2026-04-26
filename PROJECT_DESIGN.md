@@ -219,6 +219,41 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.3.14 — beta `Number()||0` 仕様への短期回避
+
+v0.3.13 でも padding/角丸が見えない件、コンソールログから ready=0.3.13 確認・サイズ追従も動作確認できたが見た目は変わらず。dictation-beta v0.13.29 の captions.js を確認したら：
+
+```js
+// captions.js buildOverlaySettings()
+borderRadius: Math.max(0, Math.min(32, Number(settings.borderRadius) || 0)),
+```
+
+**`Number(undefined) || 0` パターン**で「未設定」と「明示 0」が区別できず、常に 0 が送られていた。overlay 側はそれを律儀に CSS 変数 `--cap-border-radius: 0px` に書き込み → padding/角丸が 0 に潰れる。
+
+#### 短期回避（overlay 側）
+`s.X > 0` の時だけ CSS 変数を設定、`0` ベタ送信時は **`removeProperty()`** で CSS のフォールバック値（`var(--cap-border-radius, 8px)` の 8px 部分）が効くようにする。
+
+副作用：ユーザーがスライダーで角丸を意図的に 0 にしても overlay は無視する（fallback 8px のまま）。これは beta 側修正が来るまでの一時的な制約。
+
+#### beta 側に依頼すべき本来の修正
+`Number(settings.X) || 0` を **`settings.X ?? defaultValue`** に変える。`??` 演算子なら undefined のみフォールバック、明示 0 はそのまま 0。
+
+```diff
+- borderRadius: Math.max(0, Math.min(32, Number(settings.borderRadius) || 0)),
++ borderRadius: settings.borderRadius != null
++   ? Math.max(0, Math.min(32, Number(settings.borderRadius)))
++   : 8,
+```
+
+または、未設定フィールドはオブジェクトから外す（undefined を送る）。これなら overlay 側の「`!== undefined`」チェックで弾ける。
+
+beta 修正が入ったら overlay 側の `> 0` ガードを撤去。
+
+#### 学び
+- 「`||` で fallback」はよく使われるパターンだが、**0 / 空文字 / false が混入し得る数値**には危険
+- API 境界で「未設定 vs 明示ゼロ」を区別したいなら `??` 演算子か、未設定フィールドの不在で表現する
+- 今回はクライアント (beta) 側の API 設計バグ。overlay 側でしか直せないので**短期回避を入れる**判断
+
 ### v0.3.13 — flex-shrink: 0 追加（v0.3.12 でも残っていたオーバーフロー解消）
 
 v0.3.12 で max-width を撤去したのに、やっさん検証で**まだ padding/角丸が見えない**。

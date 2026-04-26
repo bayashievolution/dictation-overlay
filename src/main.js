@@ -63,18 +63,40 @@
         currentTransition = s.transition;
       }
     }
-    // v0.3.7: borderRadius (px, 0〜32)
+    // v0.3.7: borderRadius / paddingX / paddingY / blockGapTenth (CSS 変数化)
+    // v0.3.14: dictation-beta v0.13.x が `Number(s.X) || 0` パターンで undefined を 0 に
+    // 丸めて送ってくる仕様 → overlay 側で 0 を CSS 変数に書き込むと padding/角丸が
+    // 消える事故になる（やっさん「これまでできてたパディングや角丸が一切なくなった」報告）。
+    // 短期回避：0 は「未設定の 0」と解釈して CSS 変数を removeProperty し、CSS の
+    // fallback 値（24/10/8/0em）が効くようにする。beta 側で `?? 0` 等で undefined と
+    // 0 を区別する修正が入ったら、ここの「`> 0` ガード」を撤去できる。
     if (s.borderRadius !== undefined) {
-      caption.style.setProperty('--cap-border-radius', Number(s.borderRadius) + 'px');
+      if (Number(s.borderRadius) > 0) {
+        caption.style.setProperty('--cap-border-radius', Number(s.borderRadius) + 'px');
+      } else {
+        caption.style.removeProperty('--cap-border-radius');
+      }
     }
     if (s.paddingX !== undefined) {
-      caption.style.setProperty('--cap-padding-x', Number(s.paddingX) + 'px');
+      if (Number(s.paddingX) > 0) {
+        caption.style.setProperty('--cap-padding-x', Number(s.paddingX) + 'px');
+      } else {
+        caption.style.removeProperty('--cap-padding-x');
+      }
     }
     if (s.paddingY !== undefined) {
-      caption.style.setProperty('--cap-padding-y', Number(s.paddingY) + 'px');
+      if (Number(s.paddingY) > 0) {
+        caption.style.setProperty('--cap-padding-y', Number(s.paddingY) + 'px');
+      } else {
+        caption.style.removeProperty('--cap-padding-y');
+      }
     }
     if (s.blockGapTenth !== undefined) {
-      caption.style.setProperty('--cap-block-gap', (Number(s.blockGapTenth) / 10) + 'em');
+      if (Number(s.blockGapTenth) > 0) {
+        caption.style.setProperty('--cap-block-gap', (Number(s.blockGapTenth) / 10) + 'em');
+      } else {
+        caption.style.removeProperty('--cap-block-gap');
+      }
     }
   }
 

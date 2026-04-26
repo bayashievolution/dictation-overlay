@@ -138,6 +138,9 @@ fn main() {
                 .build(app)?;
             let report_pos_item =
                 MenuItemBuilder::with_id("report_pos", "現在位置を通知").build(app)?;
+            // v0.3.18: WebView の DevTools を開くメニュー項目（デバッグ用）
+            let devtools_item =
+                MenuItemBuilder::with_id("open_devtools", "DevTools を開く").build(app)?;
             let exit_item =
                 MenuItemBuilder::with_id("exit_overlay", "オーバーレイを終了").build(app)?;
 
@@ -146,6 +149,7 @@ fn main() {
                 .item(&visible_item)
                 .separator()
                 .item(&report_pos_item)
+                .item(&devtools_item)
                 .separator()
                 .item(&exit_item)
                 .build()?;
@@ -225,6 +229,13 @@ fn handle_tray_event(
                         height: size.height,
                     });
                 }
+            }
+        }
+        "open_devtools" => {
+            // v0.3.18: WebView の DevTools を開く。Cargo.toml で
+            // tauri features に "devtools" 追加済みなのでこの API が使える。
+            if let Some(w) = app.get_webview_window("main") {
+                w.open_devtools();
             }
         }
         "exit_overlay" => {

@@ -162,6 +162,8 @@
       if (Math.abs(w - lastW) < 2 && Math.abs(h - lastH) < 2) return;
       lastW = w;
       lastH = h;
+      // v0.3.19 debug
+      console.log('[overlay debug] ResizeObserver fired:', w, 'x', h);
       // 50ms デバウンス（連続的に伸び縮みする時に最終値だけ送る）
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
@@ -201,6 +203,25 @@
     caption.style.paddingBottom = '10px';
   }
 
+  // v0.3.19: デバッグ用 — caption の style 属性変化を MutationObserver で監視。
+  // 「inline style に 32px 入れたのに直角に見える」事故を追うため、誰が何時に
+  // 何の style を変えたかを Console に流す。
+  function installStyleWatcher() {
+    if (typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver((muts) => {
+      for (const m of muts) {
+        if (m.type === 'attributes' && m.attributeName === 'style') {
+          // style.cssText を吐く（誰が書き換えても捕捉できる）
+          console.log('[overlay debug] caption.style mutated -> ',
+            caption.style.borderRadius || '(no border-radius)',
+            '|', caption.style.padding || '(no padding)',
+            '|', caption.style.cssText.slice(0, 200));
+        }
+      }
+    });
+    obs.observe(caption, { attributes: true, attributeFilter: ['style'] });
+  }
+
   function bind() {
     const api = window.__TAURI__;
     if (!api || !api.event || typeof api.event.listen !== 'function') {
@@ -208,15 +229,20 @@
       return;
     }
     initInlineDefaults();
+    installStyleWatcher();
     api.event.listen('show-caption', (evt) => {
       const p = evt && evt.payload;
       if (!p) return;
+      // v0.3.19 debug: 受信した settings をそのまま log
+      console.log('[overlay debug] show-caption payload.settings:', p.settings);
       // show 直後に fade-out 残留があったら即剥がす（show が来たら即不透明に戻す）
       caption.classList.remove('fading-out');
       applySettings(p.settings);
       setText(p.text);
     });
     api.event.listen('update-style', (evt) => {
+      // v0.3.19 debug
+      console.log('[overlay debug] update-style payload:', evt && evt.payload);
       applySettings(evt && evt.payload);
     });
     // v0.3.9: hide-caption は Rust から「フェードアウトして消す」イベントとして受信

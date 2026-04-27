@@ -1,10 +1,10 @@
-# dictation-overlay — Native Messaging 仕様書 (v0.3.1)
+# dictation-overlay — Native Messaging 仕様書 (v0.4.0)
 
 > このドキュメントは **dictation-beta（Chrome 拡張）** 側で実装する Native Messaging 連携のための仕様書です。dictation-overlay 側（ネイティブヘルパー）がこの仕様を満たします。
 >
-> 対応バージョン：dictation-overlay v0.3.1（Phase 3b：システムトレイメニュー）
+> 対応バージョン：dictation-overlay v0.4.0（自動クリックスルー：字幕の上だけマウス反応）
 >
-> 最終更新：2026-04-25
+> 最終更新：2026-04-27
 
 ---
 
@@ -133,18 +133,35 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 
 - 右クリックメニューからの手動移動との排他性は、拡張側で「自動配置モード／手動モード」フラグを持って制御する想定。
 
-#### `set_click_through` （v0.2.0〜）
+#### `set_click_through` （v0.2.0〜、v0.4.0 で 3 モード対応）
 
-クリックスルーを ON/OFF する。ON の間は字幕窓上のマウス操作が全て下のアプリに抜ける。
+クリックスルーのモードを切り替える。**v0.4.0 から 3 モード**：
 
 ```json
+{ "type": "set_click_through", "auto": true }
 { "type": "set_click_through", "enabled": true }
+{ "type": "set_click_through", "enabled": false }
 ```
 
-- 起動時のデフォルトは **ON**（オーバーレイの本質的要求）。
-- `false` を送ると窓をドラッグしたり右クリックメニューを開いたりできる（位置調整モード）。
+| ペイロード | モード | 挙動 |
+|---|---|---|
+| `{ "auto": true }` | **Auto**（v0.4.0〜・既定） | Rust が 50ms 周期でカーソル位置を見て、`.caption` 領域内なら ignore=false、外なら ignore=true。**字幕の上だけマウスを捕捉、透明部分は下のアプリに抜ける**（やっさんが本当に欲しかった挙動） |
+| `{ "enabled": true }` | Force ON | 窓全体がクリックを下のアプリに通す（v0.3.x までの ON と同等） |
+| `{ "enabled": false }` | Force OFF | 窓全体がクリックを捕捉（位置調整専用） |
+
+- **起動時の既定は Auto**（v0.4.0 からの新挙動）。
+- `auto: true` は `enabled` フィールドを無視する。`auto` 省略 or `false` のときだけ `enabled` を見る（後方互換）。
+- 応答として `click_through_mode`（v0.4.0〜）と `click_through`（後方互換）の 2 メッセージが返る。
 - Windows は `WS_EX_TRANSPARENT`、macOS は `NSWindow.ignoresMouseEvents` に対応。
-- 応答として `click_through` メッセージが返る（下記）。
+- ドラッグ中（左ボタン押下中）はモード遷移を凍結（OS のドラッグキャプチャを切らない保険）。
+
+##### v0.3.x → v0.4.0 移行
+
+旧拡張が `{ "enabled": true|false }` を送ってもそのまま動くが、v0.3.x の「OFF」は窓全体捕捉モードなので、字幕より上の領域でマウス操作したいユースケースには向かない。**新規実装は `{ "auto": true }` を送るか、初期化時にデフォルトの Auto を使うことを推奨**。
+
+##### `capability` チェック
+
+`ready.capabilities` に `"click-through-auto"` が含まれていれば Auto モード対応。含まれていなければ v0.3.x 互換動作（`auto` フィールドは無視され `enabled` だけ見る）。
 
 #### `list_monitors` （v0.2.0〜）
 
@@ -196,7 +213,8 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
   "platform": "windows",
   "capabilities": [
     "transparency", "always-on-top", "click-through",
-    "multi-monitor", "position-report", "tray-menu", "transition"
+    "multi-monitor", "position-report", "tray-menu", "transition",
+    "writing-mode", "stream-mode", "click-through-auto"
   ]
 }
 ```
@@ -208,7 +226,10 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
   - Phase 3a (v0.3.0)：`position-report` が追加（`position_changed` メッセージが届くようになる）
   - Phase 3b (v0.3.1)：`tray-menu` が追加（ユーザーが OS のシステムトレイから操作できる）
   - v0.3.6：`transition` が追加（`settings.transition` で字幕更新時のアニメーションを指定できる）
-  - **v0.3.7：capabilities 配列に追加なし。`settings` 側に `borderRadius` / `paddingX/Y` / `blockGapTenth` を新設、`text` の `\n{2,}` 段落分けを正式仕様化**
+  - v0.3.7：capabilities 配列に追加なし。`settings` 側に `borderRadius` / `paddingX/Y` / `blockGapTenth` を新設、`text` の `\n{2,}` 段落分けを正式仕様化
+  - v0.3.16：`writing-mode` が追加（`settings.writingMode` で縦書き／横書き切替）
+  - v0.3.24：`stream-mode` が追加（`settings.streamMode: true` で YouTube 風の行スクロール）
+  - **v0.4.0：`click-through-auto` が追加**（`set_click_through { auto: true }` で「字幕の上だけマウス反応」モード、起動時既定）
   - 将来：`chroma-key` / `context-menu` などが追加される予定
 
 #### `pong`
@@ -232,11 +253,29 @@ Chrome 拡張側は `port.postMessage(obj)` / `port.onMessage.addListener(fn)` �
 
 #### `click_through` （v0.2.0〜）
 
-`set_click_through` を受理して状態が変化した時に返す。
+`set_click_through` を受理してモードが変化した時に返す（後方互換）。
 
 ```json
 { "type": "click_through", "enabled": true }
 ```
+
+- v0.4.0 〜：`enabled` は「外から見たクリックスルー有効/無効」の boolean。`Auto` / `ForceOn` モードのとき `true`、`ForceOff` のとき `false`。
+- 自動モードの 50ms 周期トグルでは送信されない（フラッディング防止）。モード遷移時の 1 回だけ。
+
+#### `click_through_mode` （v0.4.0〜）
+
+クリックスルーモードが変わった時に送る（v0.4.0 新規）。`click_through` と並行して送られる。
+
+```json
+{ "type": "click_through_mode", "mode": "auto" }
+```
+
+`mode` の取り得る値：
+- `"auto"` — 自動モード（字幕の上だけ反応）
+- `"force_on"` — 強制 ON（v0.3.x の `enabled: true` と同等）
+- `"force_off"` — 強制 OFF（v0.3.x の `enabled: false` と同等）
+
+拡張側 UI で「現在モード」を表示するときに使う。`capabilities` に `click-through-auto` が含まれない古い overlay からは届かない。
 
 #### `monitor_list` （v0.2.0〜）
 

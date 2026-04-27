@@ -208,6 +208,46 @@
   // ウィンドウサイズは Rust 側で起動時固定。`.caption` は CSS で自由に伸び縮み。
   // やっさんの「div の入れ子で簡単と思ってた」が正解。
 
+  // ---- v0.4.0: Auto click-through (caption rect push) -------------------
+  // Rust 側のマウスポーリング (50ms) に `.caption` の bounding rect を渡す。
+  // CSS px、viewport 相対のまま push。Rust 側で `window.inner_position()` と
+  // `scale_factor()` を毎 tick 見て物理スクリーン座標に変換するので、
+  // ここではウィンドウ移動を意識しなくてよい（再 push 不要）。
+  let _rectPushTimer = null;
+  function pushCaptionRect() {
+    const invoke = getInvoke();
+    if (!invoke) return;
+    const r = caption.getBoundingClientRect();
+    // 隠れている / fade-out 中 (opacity:0 だが矩形はある) は rect サイズを 0 で送って無効化
+    const visible =
+      r.width > 0 &&
+      r.height > 0 &&
+      !caption.classList.contains('fading-out');
+    const payload = visible
+      ? { x: r.left, y: r.top, w: r.width, h: r.height }
+      : { x: 0, y: 0, w: 0, h: 0 };
+    invoke('caption_rect', payload).catch(() => {});
+  }
+  function schedulePushCaptionRect() {
+    if (_rectPushTimer) return;
+    _rectPushTimer = setTimeout(() => {
+      _rectPushTimer = null;
+      pushCaptionRect();
+    }, 30); // ポーリング 50ms より速く決着するための小デバウンス
+  }
+  function setupCaptionRectObserver() {
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => schedulePushCaptionRect());
+      ro.observe(caption);
+    }
+    // フォント遅延読込で再レイアウトされたとき
+    if (document.fonts && typeof document.fonts.addEventListener === 'function') {
+      document.fonts.addEventListener('loadingdone', () => schedulePushCaptionRect());
+    }
+    // 初回 push（DOM 確定直後）
+    schedulePushCaptionRect();
+  }
+
   // ---- v0.3.9: Fade-out on hide_caption ---------------------------------
   // hide_caption 受信で window.hide() する前に CSS フェードアウトを挟む。
   // 「字幕表示 ON」が 5 秒で beta から hide_caption が来るのにも合う。
@@ -215,6 +255,9 @@
     const invoke = getInvoke();
     if (!invoke) return;
     caption.classList.add('fading-out');
+    // v0.4.0: フェード開始時点で rect も即時無効化（ポーリングが古い rect で
+    // 「字幕の上だからクリック捕捉」と誤判定するのを避ける）
+    schedulePushCaptionRect();
     setTimeout(() => {
       invoke('window_hide').catch(() => {});
       // hide した後、次に show されるときに opacity 0 のままにならないよう
@@ -244,6 +287,7 @@
       return;
     }
     initInlineDefaults();
+    setupCaptionRectObserver();
     api.event.listen('show-caption', (evt) => {
       const p = evt && evt.payload;
       if (!p) return;
@@ -251,9 +295,12 @@
       caption.classList.remove('fading-out');
       applySettings(p.settings);
       setText(p.text);
+      // v0.4.0: テキスト/スタイル変化後に必ず rect を再 push
+      schedulePushCaptionRect();
     });
     api.event.listen('update-style', (evt) => {
       applySettings(evt && evt.payload);
+      schedulePushCaptionRect();
     });
     // v0.3.9: hide-caption は Rust から「フェードアウトして消す」イベントとして受信
     api.event.listen('fade-out-and-hide', () => {

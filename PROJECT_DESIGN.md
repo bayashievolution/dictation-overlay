@@ -219,6 +219,96 @@ dictation-beta（Chrome 拡張）の字幕機能を、**OS レベルの透過・
 - ✅ Phase 1 全項目 + Phase 2 の **クリックスルー ON 常態** / **ON/OFF トグル** / **list_monitors**：やっさん環境（Windows 11）で動作確認済
 - ⚠️ Phase 2 の **set_monitor による外部モニタ移動**：外部モニタ非接続環境のため未検証。`collect_monitors()` のロジック・`position_on_monitor_bottom()` のクランプは Rust 単体テスト相当の机上確認のみ。外部モニタ接続時に実地検証が必要（Phase 3 のインストーラ検証時あたりに合わせてやる）
 
+### v0.4.0 — 自動クリックスルー（字幕の上だけ反応、PROJECT_DESIGN.md:294-299 の正攻法対応）
+
+#### 経緯
+v0.3.23 でウィンドウサイズを「動的追従 → 固定」に戻した際の副作用として、PROJECT_DESIGN.md:294-299 に「クリックスルー OFF 中、字幕より上の透明領域でマウス操作が下のアプリに届かない」「v0.4.x で mouse polling 方式で正攻法対応する」と明記して引き継いでいた。
+
+2026-04-27、dictation-beta 担当のカルディ２から overlay 掲示板に「字幕より上のマウス操作不能」の優先度引き上げ依頼。やっさんの本番ユースケース（字幕を出したまま上の講義スライドをクリック/スクロール）が現状の Auto/手動トグル往復では使えないため。
+
+#### 実装
+
+##### Rust 側 (`src-tauri/src/main.rs`)
+
+```rust
+// 3 モードの enum
+enum ClickThroughMode { Auto, ForceOn, ForceOff }
+static CLICK_THROUGH_MODE: Mutex<ClickThroughMode> = Mutex::new(ClickThroughMode::Auto);
+
+// JS から push される .caption の bounding rect (CSS px, viewport 相対)
+static CAPTION_RECT_CSS: Mutex<Option<RectCss>> = Mutex::new(None);
+
+// 50ms 周期のポーリングスレッド
+fn mouse_polling_loop(app) {
+    loop {
+        sleep(50ms);
+        if mode != Auto { continue; }
+        if left_mouse_button_pressed() { continue; }  // ドラッグ中は凍結
+        let cursor = app.cursor_position()?;          // 物理スクリーン座標
+        let inner_pos = window.inner_position()?;
+        let scale = window.scale_factor();
+        // CSS rect → 物理スクリーン座標へ変換
+        let abs = inner_pos + rect_css * scale;
+        let inside = cursor in abs;
+        let want_ignore = !inside;
+        if want_ignore != last { window.set_ignore_cursor_events(want_ignore); }
+    }
+}
+```
+
+##### JS 側 (`src/main.js`)
+
+```js
+function pushCaptionRect() {
+  const r = caption.getBoundingClientRect();
+  const visible = r.width > 0 && r.height > 0 && !caption.classList.contains('fading-out');
+  invoke('caption_rect', visible ? {x: r.left, y: r.top, w: r.width, h: r.height} : {x:0,y:0,w:0,h:0});
+}
+const ro = new ResizeObserver(() => schedulePushCaptionRect());
+ro.observe(caption);
+// show/update-style/fade-out のタイミングでも push
+```
+
+##### Native Messaging プロトコル拡張
+
+- `set_click_through { auto: true }` で Auto モード（v0.3.x の `enabled` フィールドを無視）
+- `set_click_through { enabled: true|false }` は従来通り Force ON/OFF（後方互換）
+- 起動時の既定が **Auto**（v0.4.0 からの新挙動。v0.3.x までは ON 固定だった）
+- 新 OutMessage `click_through_mode { mode: "auto"|"force_on"|"force_off" }` を追加
+- `capabilities` に `"click-through-auto"` を追加
+
+##### トレイメニュー
+
+3 モードのラジオ的 CheckMenuItem に変更：
+- 「クリックスルー: 自動 (字幕の上だけ反応)」← 既定
+- 「クリックスルー: 強制 ON」
+- 「クリックスルー: 強制 OFF」
+
+#### 設計判断のポイント
+
+1. **CSS rect は viewport 相対のまま push**：ウィンドウ移動で再 push 不要。Rust 側のポーリングが毎 tick `window.inner_position()` を読むので吸収できる。JS 側の責務は「字幕のレイアウト変化（テキスト/スタイル更新、ResizeObserver、フォント遅延読込）の検知」のみ
+2. **左マウスボタン押下中は凍結**：`data-tauri-drag-region` でドラッグ中に `set_ignore_cursor_events(true)` を入れると OS のドラッグキャプチャが切れて窓を引きずれなくなる事故を予防。`GetAsyncKeyState(VK_LBUTTON)` を Win32 API から直接呼ぶ（外部 crate 不要）
+3. **rect が None のとき = 全部素通し**：字幕が隠れている／fade-out 中／DOM 未確定のときは「字幕の上の領域」が定義できないので、保守的に ignore=true（透明部分扱い）
+4. **既定モード変更**：v0.3.x までは「ON で起動 → beta が必要に応じて OFF」だったが、v0.4.0 からは「Auto で起動 → ユーザーが必要なら force-on/off に切り替え」。実害なし（Auto は字幕がない領域では ON と同じ挙動）
+5. **後方互換**：beta v0.13.x が `set_click_through { enabled: true|false }` を送ってもそのまま動く。`auto` フィールドを認識しない overlay へ送られても serde の `#[serde(default)]` で無視される
+
+#### 既知のトレードオフ・未解決
+
+- **ポーリング 50ms の応答遅延**：マウスを字幕に入れた瞬間に反応するわけではなく、最大 50ms 遅れる。実用上はクリック開始時にちょうど切り替わっているので問題ないはずだが、超高速マウスムーブ + 即クリックでは 1 フレームだけ取り逃がす可能性がある
+- **マウスアイコンが切り替わる**：字幕の上に入った瞬間 WebView がカーソルを引き取るので、ハンドカーソル等のヒントが点滅して見える可能性。気になるなら future work で
+- **macOS / Linux ではボタン凍結が無効**：`left_mouse_button_pressed()` は `#[cfg(windows)]` 限定。他プラットフォームではドラッグ中の保険なし。当面は Windows のみ対応の Phase なので OK
+
+#### dictation-beta 側への連携依頼
+
+- v0.4.0 の現行 beta v0.13.31 は `set_click_through { enabled: true|false }` を送ってくる想定。**そのままでも overlay の Auto 既定は維持される**（beta が send しなければ）
+- もし beta の「字幕位置を固定」UI で OFF を送ると Force OFF モードに入って自動が消えてしまうので、**beta 側で Force ON / Force OFF / Auto の 3 値トグルに変えるのが望ましい**。具体的には `{ auto: true }` を Auto 用に追加で送るパターン
+- 連絡は overlay 掲示板の「カルディ２同士直接メモ」セクションへ追記する
+
+#### 学び
+
+- **設計が引き継ぎに残っていれば素早い**：PROJECT_DESIGN.md:294-299 に v0.4.x の設計を書いておいたおかげで、ほぼ机上設計のまま実装に入れた。鉄則 4「妥協に導かない」は「次に同じ問題で詰まらないよう設計を残す」と表裏一体
+- **依頼ベースで進める手応え**：beta 担当からの「優先度を上げてほしい」依頼が起点。やっさんの実機ユースケースを beta が代弁してくれた形 → カルディ２同士の直接ログが機能している証
+
 ### v0.3.16 — 縦書きモード機能（やっさんアイデアの正規実装）
 
 v0.3.10 でフィードバックループによる「事故的縦書き化」を見たやっさんが「これはこれで機能としてはおもしろいかもしれない！英語の映画に日本語字幕を出すとかね」と発案。バグの副産物を捨てるのではなく、正規機能として復活させる。

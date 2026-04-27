@@ -29,8 +29,16 @@ pub enum InMessage {
         height: u32,
     },
     /// Phase 2: toggle WS_EX_TRANSPARENT (Win32) / ignoresMouseEvents (macOS).
+    ///
+    /// v0.4.0: `auto` フィールドを追加。`auto: true` で「自動クリックスルー」モード
+    /// （Rust 側のマウスポーリングで `.caption` 領域内/外を動的に切り替え）に入る。
+    /// `enabled` は auto 時には無視する。`auto` 省略 or `false` のときは従来通り
+    /// `enabled` で強制 ON/OFF。
     SetClickThrough {
+        #[serde(default)]
         enabled: bool,
+        #[serde(default)]
+        auto: Option<bool>,
     },
     /// Phase 2: position on a specific monitor (bottom-center).
     SetMonitor {
@@ -80,6 +88,13 @@ pub enum OutMessage<'a> {
     },
     ClickThrough {
         enabled: bool,
+    },
+    /// v0.4.0: クリックスルーのモードが変わった時に送る。
+    /// `mode` は `"auto"` / `"force_on"` / `"force_off"` のいずれか。
+    /// 自動モードでは Rust が動的にカーソル位置を見て `set_ignore_cursor_events`
+    /// を切り替える。古い拡張は無視できる（後方互換）。
+    ClickThroughMode {
+        mode: &'a str,
     },
     /// Phase 3a: sent right before the native host exits intentionally.
     /// Lets the extension distinguish a planned shutdown from a crash on the
